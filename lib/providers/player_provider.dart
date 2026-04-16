@@ -4,7 +4,6 @@ import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 enum PlayerType {
   vlc,
   system,
-  exo,
 }
 
 class PlayerProvider extends ChangeNotifier {
