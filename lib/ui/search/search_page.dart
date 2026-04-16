@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:tvbox_flutter/ui/widgets/video_card.dart';
 import 'package:tvbox_flutter/models/video_item.dart';
+import 'package:tvbox_flutter/ui/detail/detail_page.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 class SearchPage extends StatefulWidget {
@@ -89,7 +90,10 @@ class _SearchPageState extends State<SearchPage> {
         return VideoCard(
           video: video,
           onTap: () {
-            // 跳转到详情页
+            Navigator.push(
+              context, 
+              MaterialPageRoute(
+                builder: (context) => DetailPage(videoId: video.id),  
           },
         );
       },
