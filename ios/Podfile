@@ -1,4 +1,7 @@
-platform :ios, '14.0'
+# 必须有这一行，加载 Flutter 的 CocoaPods 插件，否则找不到 flutter_install_all_ios_pods
+require File.expand_path(File.join('..', '.symlinks', 'plugins', 'cocoapods', 'loader'))
+
+platform :ios, '14.0' # 对齐原项目的 14.0，解决部署目标过低问题
 
 target 'Runner' do
   use_frameworks!
@@ -7,8 +10,11 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 end
 
+# 修复：强制所有 Pod 使用 14.0 部署目标，解决警告
 post_install do |installer|
   installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+    end
   end
 end
