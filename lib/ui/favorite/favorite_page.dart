@@ -38,7 +38,7 @@ class FavoritePage extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => DetailPage(video: video),
+                      builder: (context) => DetailPage(videoId: video.id),
                     ),
                   );
                 },
