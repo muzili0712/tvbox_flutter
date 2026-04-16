@@ -1,9 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:tvbox_flutter/models/cloud_drive.dart';
 import 'package:tvbox_flutter/constants/app_constants.dart';
-import 'dart:convert';
 
 class CloudDriveProvider extends ChangeNotifier {
   List<CloudDrive> _drives = [];
@@ -13,17 +13,17 @@ class CloudDriveProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   CloudDriveProvider() {
-    _loadDrives();
+    loadDrives();
   }
 
-  Future<void> _loadDrives() async {
+  Future<void> loadDrives() async {
     final prefs = await SharedPreferences.getInstance();
     final drivesJson = prefs.getStringList(AppConstants.keyCloudDrives) ?? [];
-    
+
     _drives = drivesJson
         .map((json) => CloudDrive.fromJson(jsonDecode(json)))
         .toList();
-    
+
     notifyListeners();
   }
 
