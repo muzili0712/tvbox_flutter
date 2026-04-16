@@ -52,11 +52,13 @@ jobs:
 
           echo "✅ 框架验证通过"
 
-      - name: Install Flutter Dependencies
+      - name: Install Flutter Dependencies & Generate JSON Code
         run: |
           echo "=== 安装 Flutter 依赖 ==="
           flutter pub get
-          echo "✅ Flutter 依赖安装完成"
+          echo "=== 生成 JSON 序列化代码 (解决 _$VideoItemToJson 错误) ==="
+          dart run build_runner build --delete-conflicting-outputs
+          echo "✅ 依赖安装与代码生成完成"
 
       - name: Install iOS Pods
         run: |
