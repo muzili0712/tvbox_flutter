@@ -27,9 +27,9 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
       widget.url,
       autoPlay: true,
       options: VlcPlayerOptions(
-        video: VlcVideoOptions(),
-        audio: VlcAudioOptions(),
-        subtitle: VlcSubtitleOptions(),
+        video: VlcVideoOptions({}),
+        audio: VlcAudioOptions({}),
+        subtitle: VlcSubtitleOptions({}),
         extras: [
           '--network-caching=1000',
           '--rtsp-tcp',
