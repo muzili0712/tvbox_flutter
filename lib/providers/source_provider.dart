@@ -32,8 +32,12 @@ class SourceProvider extends ChangeNotifier {
     if (currentSourceId != null) {
       _currentSource = _sources.firstWhere(
         (s) => s.id == currentSourceId,
-        orElse: () => _sources.isNotEmpty ? _sources.first : null,
+        orElse: () => _sources.isNotEmpty ? _sources.first : SourceConfig.empty(),
       );
+      // 如果返回的是 empty 占位，且实际来源列表不为空，则取第一个
+      if (_currentSource!.id.isEmpty && _sources.isNotEmpty) {
+        _currentSource = _sources.first;
+      }
     } else if (_sources.isNotEmpty) {
       _currentSource = _sources.first;
     }
