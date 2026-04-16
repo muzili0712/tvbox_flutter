@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:tvbox_flutter/ui/widgets/video_card.dart';
 import 'package:tvbox_flutter/models/video_item.dart';
@@ -91,9 +90,11 @@ class _SearchPageState extends State<SearchPage> {
           video: video,
           onTap: () {
             Navigator.push(
-              context, 
+              context,
               MaterialPageRoute(
-                builder: (context) => DetailPage(videoId: video.id),  
+                builder: (context) => DetailPage(videoId: video.id),
+              ),
+            );
           },
         );
       },
