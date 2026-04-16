@@ -6,7 +6,6 @@ class NodeJSBridge: NSObject {
     private var nodeChannel: NodeChannel?
     private var isRunning = false
     private var messageQueue: [String] = []
-    private var completionHandlers: [String: (Result<Any, Error>) -> Void] = [:]
     
     private override init() {
         super.init()
@@ -30,7 +29,7 @@ class NodeJSBridge: NSObject {
             self?.handleMessageFromNode(message)
         }
         
-        // 等待Node.js初始化完成
+        // 等待Node.js初始化
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             guard let self = self else { return }
             self.isRunning = true
@@ -44,30 +43,25 @@ class NodeJSBridge: NSObject {
         nodeChannel?.stop()
         isRunning = false
         messageQueue.removeAll()
-        completionHandlers.removeAll()
     }
     
-    func sendMessage(_ message: String, completion: ((Result<Any, Error>) -> Void)? = nil) {
-        if let completion = completion {
-            let messageId = UUID().uuidString
-            completionHandlers[messageId] = completion
-            
-            // 添加messageId到消息中
-            if let data = message.data(using: .utf8),
-               var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                json["messageId"] = messageId
-                if let jsonData = try? JSONSerialization.data(withJSONObject: json),
-                   let jsonString = String(data: jsonData, encoding: .utf8) {
-                    if isRunning {
-                        nodeChannel?.sendMessage(jsonString)
-                    } else {
-                        messageQueue.append(jsonString)
-                    }
-                    return
-                }
-            }
-        }
-        
+    // 原项目的run动作：加载本地Spider脚本
+    func runScript(_ path: String) {
+        sendMessage(JSON.stringify([
+            "action": "run",
+            "path": path
+        ]))
+    }
+    
+    // 原项目的nativeServerPort：设置Dart端服务器端口
+    func setNativeServerPort(_ port: Int) {
+        sendMessage(JSON.stringify([
+            "action": "nativeServerPort",
+            "port": port
+        ]))
+    }
+    
+    func sendMessage(_ message: String) {
         if isRunning {
             nodeChannel?.sendMessage(message)
         } else {
@@ -85,19 +79,9 @@ class NodeJSBridge: NSObject {
     private func handleMessageFromNode(_ message: String) {
         print("Received from Node.js: \(message)")
         
-        // 检查是否是响应消息
-        if let data = message.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let messageId = json["messageId"] as? String,
-           let completion = completionHandlers[messageId] {
-            
-            if let error = json["error"] as? String {
-                completion(.failure(NSError(domain: "NodeJS", code: -1, userInfo: [NSLocalizedDescriptionKey: error])))
-            } else {
-                completion(.success(json["result"] ?? NSNull()))
-            }
-            
-            completionHandlers.removeValue(forKey: messageId)
+        // 处理原项目的CatVod端口事件
+        if message == "ready" {
+            print("Node.js runtime ready")
             return
         }
         
