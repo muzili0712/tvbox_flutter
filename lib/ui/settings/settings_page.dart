@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/providers/source_provider.dart';
@@ -23,7 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _getAppVersion() async {
-    final packageInfo = await PackageInfo.fromPackageInfo();
+    final packageInfo = await PackageInfo.fromPlatform();
     setState(() {
       _appVersion = packageInfo.version;
     });
