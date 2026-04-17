@@ -1,5 +1,4 @@
 import Foundation
-import NodeMobile
 import GCDWebServer
 
 class NodeJSBridge: NSObject {
@@ -30,7 +29,6 @@ class NodeJSBridge: NSObject {
             
             self.webServer.removeAllHandlers()
             
-            // GET /onCatPawOpenPort
             self.webServer.addDefaultHandler(forMethod: "GET", request: GCDWebServerRequest.self) { [weak self] request in
                 if request.path == "/onCatPawOpenPort" {
                     if let portStr = request.query?["port"], let port = Int(portStr) {
@@ -42,7 +40,6 @@ class NodeJSBridge: NSObject {
                 return GCDWebServerResponse(statusCode: 404)
             }
             
-            // POST /msg
             self.webServer.addHandler(forMethod: "POST", path: "/msg", request: GCDWebServerDataRequest.self) { [weak self] request in
                 if let dataRequest = request as? GCDWebServerDataRequest {
                     let body = String(data: dataRequest.data, encoding: .utf8) ?? ""
@@ -51,7 +48,6 @@ class NodeJSBridge: NSObject {
                 return GCDWebServerDataResponse(text: "OK")
             }
             
-            // 捕获 Objective‑C 异常
             let exception = self.catchException {
                 do {
                     try self.webServer.start(options: [
@@ -102,21 +98,12 @@ class NodeJSBridge: NSObject {
                     return
                 }
                 
-                // 正确的 C 函数指针获取方式 - 使用可选绑定避免编译错误
-                typealias NodeStartFunction = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
-                let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "node_start")
-                guard let sym = sym else {
-                    print("❌ node_start not found")
-                    DispatchQueue.main.async { completion(false) }
-                    return
-                }
-                let node_start = unsafeBitCast(sym, to: NodeStartFunction.self)
-                
                 let args = ["node", scriptPath]
                 var cArgs = args.map { strdup($0) }
                 let argc = Int32(cArgs.count)
                 
                 DispatchQueue.global(qos: .userInitiated).async {
+                    // 直接调用 C 函数
                     _ = node_start(argc, &cArgs)
                     for ptr in cArgs { free(ptr) }
                     self.isRunning = false
@@ -170,7 +157,6 @@ class NodeJSBridge: NSObject {
         )
     }
     
-    // Objective‑C 异常捕获辅助方法
     private func catchException(_ block: @escaping () -> Void) -> NSException? {
         var result: NSException?
         let exceptionHandler = { (exception: NSException) in
