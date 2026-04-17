@@ -102,12 +102,15 @@ class NodeJSBridge: NSObject {
                     return
                 }
                 
-                // 获取 node_start 函数指针的安全方式
-                guard let node_start = getNodeStart() else {
+                // 正确的 C 函数指针获取方式 - 使用可选绑定避免编译错误
+                typealias NodeStartFunction = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+                let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "node_start")
+                guard let sym = sym else {
                     print("❌ node_start not found")
                     DispatchQueue.main.async { completion(false) }
                     return
                 }
+                let node_start = unsafeBitCast(sym, to: NodeStartFunction.self)
                 
                 let args = ["node", scriptPath]
                 var cArgs = args.map { strdup($0) }
@@ -179,12 +182,4 @@ class NodeJSBridge: NSObject {
         NSSetUncaughtExceptionHandler(previousHandler)
         return result
     }
-}
-
-// 全局函数：获取 node_start 指针，避免在 Swift 闭包中直接转换 C 函数指针
-private func getNodeStart() -> (@convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32)? {
-    guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "node_start") else {
-        return nil
-    }
-    return unsafeBitCast(sym, to: (@convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32).self)
 }
