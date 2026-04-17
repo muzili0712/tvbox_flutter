@@ -180,24 +180,33 @@ jobs:
       - name: Build TVBox (TrollStore)
         run: |
           echo "=== 使用 Flutter 构建完整 .app ==="
-          # 确保 Flutter 依赖已安装
           flutter pub get
-          
-          # 构建 Release 版本的 .app (无签名，适合 TrollStore)
           flutter build ios --release --no-codesign
           
-          # 验证生成的 Runner.app
           APP_PATH="./build/ios/iphoneos/Runner.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "❌ Flutter 构建失败：未找到 Runner.app"
             exit 1
           fi
           
-          # 检查二进制文件大小（Flutter 引擎应大于 40MB）
-          BIN_SIZE=$(ls -l "$APP_PATH/Runner" | awk '{print $5}')
-          echo "Runner 二进制大小: $BIN_SIZE 字节"
+          # 检查 Flutter 引擎二进制 (App.framework/App)
+          FLUTTER_APP_BIN="$APP_PATH/Frameworks/App.framework/App"
+          if [ ! -f "$FLUTTER_APP_BIN" ]; then
+            echo "❌ 未找到 Flutter 引擎二进制：$FLUTTER_APP_BIN"
+            exit 1
+          fi
+          
+          BIN_SIZE=$(ls -l "$FLUTTER_APP_BIN" | awk '{print $5}')
+          echo "Flutter 引擎 (App.framework/App) 大小: $BIN_SIZE 字节"
           if [ "$BIN_SIZE" -lt 40000000 ]; then
-            echo "❌ 错误：二进制文件过小 ($BIN_SIZE)，Flutter 引擎未正确嵌入"
+            echo "❌ 错误：Flutter 引擎过小 ($BIN_SIZE)，构建不完整"
+            exit 1
+          fi
+          
+          # 同时验证 Runner 存根 (通常几百KB，但存在即可)
+          RUNNER_BIN="$APP_PATH/Runner"
+          if [ ! -f "$RUNNER_BIN" ]; then
+            echo "❌ 未找到 Runner 存根"
             exit 1
           fi
           
