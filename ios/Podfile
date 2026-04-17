@@ -30,6 +30,9 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+  # 新增：稳定可靠的嵌入式 HTTP 服务器
+  pod 'GCDWebServer', '~> 3.5'
 end
 
 post_install do |installer|
