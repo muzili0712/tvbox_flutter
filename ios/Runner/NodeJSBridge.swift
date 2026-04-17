@@ -9,101 +9,136 @@ class NodeJSBridge: NSObject {
     private var nodeServerPort: Int?
     private let webServer = GCDWebServer()
     private let queue = DispatchQueue(label: "com.tvbox.nodejs")
+    private var serverStarted = false
     
     private override init() {
         super.init()
-        setupWebServer()
+        // 不在 init 中启动任何可能失败的操作
     }
     
-    // MARK: - HTTP Server (GCDWebServer)
-    private func setupWebServer() {
-        // 处理 /onCatPawOpenPort?port=xxxx
-        webServer.addDefaultHandler(forMethod: "GET", request: GCDWebServerRequest.self) { [weak self] request in
-            if request.path == "/onCatPawOpenPort" {
-                if let portStr = request.query?["port"], let port = Int(portStr) {
-                    self?.nodeServerPort = port
-                    print("🐱 Node.js source server port: \(port)")
+    // MARK: - HTTP Server (安全启动)
+    private func ensureWebServerStarted(completion: @escaping (Bool) -> Void) {
+        if serverStarted {
+            completion(true)
+            return
+        }
+        
+        queue.async { [weak self] in
+            guard let self = self else {
+                completion(false)
+                return
+            }
+            
+            // 移除所有已注册的 handler，重新注册
+            self.webServer.removeAllHandlers()
+            
+            // GET /onCatPawOpenPort?port=xxx
+            self.webServer.addDefaultHandler(forMethod: "GET", request: GCDWebServerRequest.self) { [weak self] request in
+                if request.path == "/onCatPawOpenPort" {
+                    if let portStr = request.query?["port"], let port = Int(portStr) {
+                        self?.nodeServerPort = port
+                        print("🐱 Node.js source server port: \(port)")
+                    }
+                    return GCDWebServerDataResponse(text: "OK")
+                }
+                return GCDWebServerResponse(statusCode: 404)
+            }
+            
+            // POST /msg
+            self.webServer.addHandler(forMethod: "POST", path: "/msg", request: GCDWebServerDataRequest.self) { [weak self] request in
+                if let dataRequest = request as? GCDWebServerDataRequest {
+                    let body = String(data: dataRequest.data, encoding: .utf8) ?? ""
+                    self?.handleMessageFromNode(body)
                 }
                 return GCDWebServerDataResponse(text: "OK")
             }
-            return GCDWebServerResponse(statusCode: 404)
-        }
-        
-        // 处理 /msg (接收来自 Node.js 的主动消息)
-        webServer.addHandler(forMethod: "POST", path: "/msg", request: GCDWebServerDataRequest.self) { [weak self] request in
-            if let dataRequest = request as? GCDWebServerDataRequest {
-                let body = String(data: dataRequest.data, encoding: .utf8) ?? ""
-                self?.handleMessageFromNode(body)
+            
+            // 捕获 Objective‑C 异常
+            let exception = tryBlock {
+                do {
+                    try self.webServer.start(options: [
+                        GCDWebServerOption_Port: 0,
+                        GCDWebServerOption_BindToLocalhost: true,
+                        GCDWebServerOption_AutomaticallySuspendInBackground: false
+                    ])
+                    self.serverStarted = true
+                    let port = self.webServer.port
+                    setenv("DART_SERVER_PORT", "\(port)", 1)
+                    print("✅ HTTP server started on port \(port)")
+                    DispatchQueue.main.async { completion(true) }
+                } catch {
+                    print("❌ HTTP server start error: \(error)")
+                    DispatchQueue.main.async { completion(false) }
+                }
             }
-            return GCDWebServerDataResponse(text: "OK")
-        }
-        
-        // 启动服务器（端口 0 表示自动分配）
-        do {
-            try webServer.start(options: [
-                GCDWebServerOption_Port: 0,
-                GCDWebServerOption_BindToLocalhost: true
-            ])
-            let port = webServer.port
-            setenv("DART_SERVER_PORT", "\(port)", 1)
-            print("✅ HTTP server started on port \(port)")
-        } catch {
-            print("❌ Failed to start HTTP server: \(error)")
+            
+            if let exception = exception {
+                print("❌ HTTP server exception: \(exception)")
+                DispatchQueue.main.async { completion(false) }
+            }
         }
     }
     
     // MARK: - Node.js Startup
     func startNodeJS(completion: @escaping (Bool) -> Void) {
-        queue.async { [weak self] in
+        // 先确保 HTTP 服务器已启动
+        ensureWebServerStarted { [weak self] success in
             guard let self = self else {
-                DispatchQueue.main.async { completion(false) }
+                completion(false)
+                return
+            }
+            if !success {
+                print("❌ Web server failed to start, aborting Node.js launch")
+                completion(false)
                 return
             }
             
-            if self.isRunning {
+            self.queue.async {
+                if self.isRunning {
+                    DispatchQueue.main.async { completion(true) }
+                    return
+                }
+                
+                guard let scriptPath = Bundle.main.path(forResource: "main", ofType: "js", inDirectory: "nodejs-project/dist") else {
+                    print("❌ Node.js script not found")
+                    DispatchQueue.main.async { completion(false) }
+                    return
+                }
+                
+                typealias NodeStartFunc = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+                guard let node_start_ptr = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "node_start") else {
+                    print("❌ node_start not found")
+                    DispatchQueue.main.async { completion(false) }
+                    return
+                }
+                let node_start = unsafeBitCast(node_start_ptr, to: NodeStartFunc.self)
+                
+                let args = ["node", scriptPath]
+                var cArgs = args.map { strdup($0) }
+                let argc = Int32(cArgs.count)
+                
+                DispatchQueue.global(qos: .userInitiated).async {
+                    _ = node_start(argc, &cArgs)
+                    for ptr in cArgs { free(ptr) }
+                    self.isRunning = false
+                    print("Node.js exited")
+                }
+                
+                Thread.sleep(forTimeInterval: 2.0)
+                self.isRunning = true
                 DispatchQueue.main.async { completion(true) }
-                return
             }
-            
-            guard let scriptPath = Bundle.main.path(forResource: "main", ofType: "js", inDirectory: "nodejs-project/dist") else {
-                print("❌ Node.js script not found")
-                DispatchQueue.main.async { completion(false) }
-                return
-            }
-            
-            typealias NodeStartFunc = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
-            guard let node_start_ptr = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "node_start") else {
-                print("❌ node_start not found")
-                DispatchQueue.main.async { completion(false) }
-                return
-            }
-            let node_start = unsafeBitCast(node_start_ptr, to: NodeStartFunc.self)
-            
-            let args = ["node", scriptPath]
-            var cArgs = args.map { strdup($0) }
-            let argc = Int32(cArgs.count)
-            
-            DispatchQueue.global(qos: .userInitiated).async {
-                _ = node_start(argc, &cArgs)
-                for ptr in cArgs { free(ptr) }
-                self.isRunning = false
-                print("Node.js exited")
-            }
-            
-            Thread.sleep(forTimeInterval: 2.0)
-            self.isRunning = true
-            DispatchQueue.main.async { completion(true) }
         }
     }
     
     func stopNodeJS() {
         queue.async { [weak self] in
             self?.webServer.stop()
+            self?.serverStarted = false
             self?.isRunning = false
         }
     }
     
-    // MARK: - Message Sending (HTTP to Node source server)
     func sendMessage(_ message: String, completion: ((Result<Any, Error>) -> Void)? = nil) {
         queue.async { [weak self] in
             guard let nodePort = self?.nodeServerPort else {
@@ -134,5 +169,27 @@ class NodeJSBridge: NSObject {
             object: nil,
             userInfo: ["message": message]
         )
+    }
+}
+
+// Objective‑C 异常捕获辅助函数
+func tryBlock(_ block: () -> Void) -> NSException? {
+    let exception = NSException.catch {
+        block()
+    }
+    return exception
+}
+
+extension NSException {
+    static func `catch`(_ block: () -> Void) -> NSException? {
+        var result: NSException?
+        let exceptionHandler = { (exception: NSException) in
+            result = exception
+        }
+        let previousHandler = NSGetUncaughtExceptionHandler()
+        NSSetUncaughtExceptionHandler(exceptionHandler)
+        block()
+        NSSetUncaughtExceptionHandler(previousHandler)
+        return result
     }
 }
