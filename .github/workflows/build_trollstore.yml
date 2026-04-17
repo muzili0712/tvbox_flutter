@@ -179,68 +179,40 @@ jobs:
 
       - name: Build TVBox (TrollStore)
         run: |
-          echo "=== 1. Flutter 构建 (生成完整引擎) ==="
-          # 这一步会生成 Runner.app 所需的 Flutter 引擎和资源，并放入 ios/Flutter 目录
+          echo "=== 使用 Flutter 构建完整 .app ==="
+          # 确保 Flutter 依赖已安装
+          flutter pub get
+          
+          # 构建 Release 版本的 .app (无签名，适合 TrollStore)
           flutter build ios --release --no-codesign
           
-          echo "=== 2. 清理 Xcode 缓存 ==="
-          cd ios
-          rm -rf DerivedData ArchivePath
-          
-          echo "=== 3. 使用 xcodebuild archive 打包 (无签名) ==="
-          set +o pipefail
-          xcodebuild archive \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -archivePath ./ArchivePath/Runner.xcarchive \
-            -destination 'generic/platform=iOS' \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            2>&1 | tee build.log
-          
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          
-          if [ $BUILD_EXIT_CODE -eq 0 ]; then
-            echo "✅ 归档成功"
-            
-            # 从 .xcarchive 中提取 .app
-            APP_PATH=$(find ./ArchivePath/Runner.xcarchive/Products/Applications -name "Runner.app" -type d | head -1)
-            if [ -z "$APP_PATH" ]; then
-              echo "❌ 未找到 Runner.app"
-              exit 1
-            fi
-            echo "APP 路径: $APP_PATH"
-            
-            # 验证二进制文件大小（正常情况应大于 30 MB）
-            BIN_SIZE=$(ls -l "$APP_PATH/Runner" | awk '{print $5}')
-            echo "Runner 二进制大小: $BIN_SIZE 字节"
-            if [ "$BIN_SIZE" -lt 30000000 ]; then
-              echo "❌ 错误：二进制文件过小 ($BIN_SIZE 字节)，Flutter 引擎可能未正确嵌入"
-              exit 1
-            fi
-            
-            echo "=== 4. 打包 TrollStore IPA ==="
-            mkdir -p ../Build
-            TEMP_DIR=$(mktemp -d)
-            mkdir -p "$TEMP_DIR/Payload"
-            cp -r "$APP_PATH" "$TEMP_DIR/Payload/"
-            cd "$TEMP_DIR"
-            zip -r "$GITHUB_WORKSPACE/Build/tvbox-Flutter-TrollStore.ipa" Payload
-            cd "$GITHUB_WORKSPACE"
-            rm -rf "$TEMP_DIR"
-            
-            echo "✅ IPA 已生成: ./Build/tvbox-Flutter-TrollStore.ipa"
-            ls -lh ./Build/
-          else
-            echo "❌ 构建失败"
-            echo "=== 最后 100 行日志 ==="
-            tail -100 build.log
+          # 验证生成的 Runner.app
+          APP_PATH="./build/ios/iphoneos/Runner.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "❌ Flutter 构建失败：未找到 Runner.app"
             exit 1
           fi
-          cd ..
+          
+          # 检查二进制文件大小（Flutter 引擎应大于 40MB）
+          BIN_SIZE=$(ls -l "$APP_PATH/Runner" | awk '{print $5}')
+          echo "Runner 二进制大小: $BIN_SIZE 字节"
+          if [ "$BIN_SIZE" -lt 40000000 ]; then
+            echo "❌ 错误：二进制文件过小 ($BIN_SIZE)，Flutter 引擎未正确嵌入"
+            exit 1
+          fi
+          
+          echo "=== 打包 TrollStore IPA ==="
+          mkdir -p ./Build
+          TEMP_DIR=$(mktemp -d)
+          mkdir -p "$TEMP_DIR/Payload"
+          cp -r "$APP_PATH" "$TEMP_DIR/Payload/"
+          cd "$TEMP_DIR"
+          zip -r "$GITHUB_WORKSPACE/Build/tvbox-Flutter-TrollStore.ipa" Payload
+          cd "$GITHUB_WORKSPACE"
+          rm -rf "$TEMP_DIR"
+          
+          echo "✅ IPA 已生成: ./Build/tvbox-Flutter-TrollStore.ipa"
+          ls -lh ./Build/
 
       - name: Upload IPA
         if: success()
