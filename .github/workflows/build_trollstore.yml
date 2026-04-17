@@ -181,31 +181,45 @@ jobs:
         run: |
           echo "=== 开始构建 ==="
           cd ios
-          rm -rf DerivedData
-          xcodebuild clean -workspace Runner.xcworkspace -scheme Runner -destination 'generic/platform=iOS' || true
+          rm -rf DerivedData ArchivePath
           
-          echo "=== 执行构建 ==="
+          echo "=== 清理 ==="
+          xcodebuild clean -workspace Runner.xcworkspace -scheme Runner -configuration Release
+          
+          echo "=== 归档 (Archive) ==="
           set +o pipefail
-          xcodebuild build -configuration Release \
+          xcodebuild archive \
             -workspace Runner.xcworkspace \
             -scheme Runner \
+            -configuration Release \
+            -archivePath ./ArchivePath/Runner.xcarchive \
             -destination 'generic/platform=iOS' \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            -derivedDataPath ./DerivedData \
+            ONLY_ACTIVE_ARCH=NO \
             2>&1 | tee build.log
           
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           
           if [ $BUILD_EXIT_CODE -eq 0 ]; then
-            echo "✅ 构建成功"
-            APP_PATH=$(find ./DerivedData -name "Runner.app" -type d | head -1)
+            echo "✅ 归档成功"
+            
+            # 从 .xcarchive 中提取 .app (已包含完整的 Flutter 引擎和资源)
+            APP_PATH=$(find ./ArchivePath/Runner.xcarchive/Products/Applications -name "Runner.app" -type d | head -1)
             if [ -z "$APP_PATH" ]; then
               echo "❌ 未找到 Runner.app"
               exit 1
             fi
             echo "APP 路径: $APP_PATH"
+            
+            # 验证二进制文件大小
+            BIN_SIZE=$(ls -l "$APP_PATH/Runner" | awk '{print $5}')
+            echo "Runner 二进制大小: $BIN_SIZE 字节"
+            if [ "$BIN_SIZE" -lt 1000000 ]; then
+              echo "❌ 错误：二进制文件过小 ($BIN_SIZE)，构建可能不完整"
+              exit 1
+            fi
             
             echo "=== 打包 TrollStore IPA ==="
             mkdir -p ../Build
