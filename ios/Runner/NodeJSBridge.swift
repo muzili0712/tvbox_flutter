@@ -13,10 +13,9 @@ class NodeJSBridge: NSObject {
     
     private override init() {
         super.init()
-        // 不在 init 中启动任何可能失败的操作
     }
     
-    // MARK: - HTTP Server (安全启动)
+    // MARK: - HTTP Server
     private func ensureWebServerStarted(completion: @escaping (Bool) -> Void) {
         if serverStarted {
             completion(true)
@@ -25,14 +24,13 @@ class NodeJSBridge: NSObject {
         
         queue.async { [weak self] in
             guard let self = self else {
-                completion(false)
+                DispatchQueue.main.async { completion(false) }
                 return
             }
             
-            // 移除所有已注册的 handler，重新注册
             self.webServer.removeAllHandlers()
             
-            // GET /onCatPawOpenPort?port=xxx
+            // GET /onCatPawOpenPort
             self.webServer.addDefaultHandler(forMethod: "GET", request: GCDWebServerRequest.self) { [weak self] request in
                 if request.path == "/onCatPawOpenPort" {
                     if let portStr = request.query?["port"], let port = Int(portStr) {
@@ -54,7 +52,7 @@ class NodeJSBridge: NSObject {
             }
             
             // 捕获 Objective‑C 异常
-            let exception = tryBlock {
+            let exception = self.catchException {
                 do {
                     try self.webServer.start(options: [
                         GCDWebServerOption_Port: 0,
@@ -81,7 +79,6 @@ class NodeJSBridge: NSObject {
     
     // MARK: - Node.js Startup
     func startNodeJS(completion: @escaping (Bool) -> Void) {
-        // 先确保 HTTP 服务器已启动
         ensureWebServerStarted { [weak self] success in
             guard let self = self else {
                 completion(false)
@@ -105,13 +102,9 @@ class NodeJSBridge: NSObject {
                     return
                 }
                 
-                typealias NodeStartFunc = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
-                guard let node_start_ptr = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "node_start") else {
-                    print("❌ node_start not found")
-                    DispatchQueue.main.async { completion(false) }
-                    return
-                }
-                let node_start = unsafeBitCast(node_start_ptr, to: NodeStartFunc.self)
+                // 正确的 C 函数指针获取方式
+                typealias NodeStartFunction = @convention(c) (Int32, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+                let node_start = unsafeBitCast(dlsym(UnsafeMutableRawPointer(bitPattern: -2), "node_start"), to: NodeStartFunction.self)
                 
                 let args = ["node", scriptPath]
                 var cArgs = args.map { strdup($0) }
@@ -170,18 +163,9 @@ class NodeJSBridge: NSObject {
             userInfo: ["message": message]
         )
     }
-}
-
-// Objective‑C 异常捕获辅助函数
-func tryBlock(_ block: () -> Void) -> NSException? {
-    let exception = NSException.catch {
-        block()
-    }
-    return exception
-}
-
-extension NSException {
-    static func `catch`(_ block: () -> Void) -> NSException? {
+    
+    // Objective‑C 异常捕获辅助方法
+    private func catchException(_ block: @escaping () -> Void) -> NSException? {
         var result: NSException?
         let exceptionHandler = { (exception: NSException) in
             result = exception
