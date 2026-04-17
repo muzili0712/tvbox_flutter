@@ -218,7 +218,7 @@ jobs:
             rm -rf "$TEMP_DIR"
             
             echo "✅ IPA 已生成: ./Build/tvbox-Flutter-TrollStore.ipa"
-            ls -lh ../Build/
+            ls -lh ./Build/
           else
             echo "❌ 构建失败"
             echo "=== 最后 100 行日志 ==="
