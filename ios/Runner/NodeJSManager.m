@@ -30,12 +30,18 @@
         const char *argv[] = {"node", [scriptPathCopy UTF8String], NULL};
         int argc = 2;
         
+        NSLog(@"🚀 Starting Node.js with script: %@", scriptPathCopy);
         int result = node_start(argc, (char **)argv);
         NSLog(@"Node.js exited with code %d", result);
+        
+        // Node.js 进程结束后更新状态
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.isRunning = NO;
+        });
     });
     
-    // 等待初始化
-    [NSThread sleepForTimeInterval:2.0];
+    // 立即返回,不等待 Node.js 启动
+    // Node.js 会在后台线程中异步启动
     self.isRunning = YES;
     if (completion) completion(YES);
 }

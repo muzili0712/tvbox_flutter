@@ -48,24 +48,27 @@ class NodeJSService extends ChangeNotifier {
 
     // 3. 等待 Node.js 源服务端口就绪（通过 /onCatPawOpenPort 回调设置）
     _portCompleter = Completer<int>();
-    // 超时处理
-    _portCompleter!.future.timeout(const Duration(seconds: 10), onTimeout: () {
-      if (!_portCompleter!.isCompleted) {
-        _portCompleter!.completeError('Timeout waiting for Node.js source server port');
+    
+    // 启动超时定时器
+    final timeoutTimer = Timer(const Duration(seconds: 15), () {
+      if (_portCompleter != null && !_portCompleter!.isCompleted) {
+        print('⚠️ Timeout waiting for Node.js source server port');
+        _portCompleter!.complete(-1);
       }
-      return Future.value(-1);
-    }).catchError((e) {
-      print('⚠️ Port wait error: $e');
-      return -1;
     });
-
+    
     try {
       _sourceServerPort = await _portCompleter!.future;
+      timeoutTimer.cancel();
+      
       if (_sourceServerPort != null && _sourceServerPort! > 0) {
         print('✅ Node.js source server ready on port $_sourceServerPort');
+      } else {
+        print('⚠️ Node.js source server port not received, using fallback');
       }
     } catch (e) {
-      print('❌ Node.js source server port not received: $e');
+      print('❌ Node.js source server port error: $e');
+      timeoutTimer.cancel();
     }
     _portCompleter = null;
 
