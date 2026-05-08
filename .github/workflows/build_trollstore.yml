@@ -133,12 +133,36 @@ jobs:
 
       - name: Build TVBox (TrollStore)
         run: |
+          echo "=== 配置 Xcode 项目 ==="
+          
+          # 设置 CODE_SIGNING_REQUIRED = NO
+          /usr/libexec/PlistBuddy -c "Set :BuildSettings:CODE_SIGNING_REQUIRED NO" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :BuildSettings:CODE_SIGN_IDENTITY ''" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+          
           echo "=== 使用 Flutter 构建完整 .app ==="
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign --no-tree-shake-icons || {
+            echo "Flutter build failed, trying with xcodebuild..."
+            
+            # 备用方案：使用 xcodebuild
+            cd ios
+            xcodebuild -workspace Runner.xcworkspace \
+              -scheme Runner \
+              -configuration Release \
+              -sdk iphoneos \
+              -arch arm64 \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              DEVELOPMENT_TEAM="" \
+              ONLY_ACTIVE_ARCH=NO \
+              BUILD_DIR="../build/ios" \
+              CONFIGURATION_BUILD_DIR="../build/ios/iphoneos"
+            cd ..
+          }
           
           APP_PATH="./build/ios/iphoneos/Runner.app"
           if [ ! -d "$APP_PATH" ]; then
-            echo "❌ Flutter 构建失败：未找到 Runner.app"
+            echo "❌ 构建失败：未找到 Runner.app"
+            ls -la build/ios/ || true
             exit 1
           fi
           
