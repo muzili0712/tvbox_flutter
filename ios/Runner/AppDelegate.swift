@@ -7,6 +7,10 @@ import Flutter
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        // 设置 Node.js 数据库路径为 Documents 目录
+        let docsPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
+        setenv("NODE_PATH", docsPath, 1)
+        
         let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
         let nodeChannel = FlutterMethodChannel(name: "com.tvbox/nodejs", binaryMessenger: controller.binaryMessenger)
         

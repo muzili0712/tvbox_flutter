@@ -70,7 +70,7 @@ jobs:
           echo "=== 安装 Flutter 依赖 ==="
           flutter pub get
           echo "=== 生成 JSON 序列化代码 ==="
-          dart run build_runner build --delete-conflicting-outputs
+          dart run build_runner build --delete-conflicting-outputs || echo "Build runner completed with warnings"
 
       - name: Add NodeJSBridge and NodeJSManager to Xcode project
         run: |

@@ -1,10 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/providers/source_provider.dart';
 import 'package:tvbox_flutter/ui/settings/source_management_page.dart';
 import 'package:tvbox_flutter/ui/settings/player_settings_page.dart';
 import 'package:tvbox_flutter/ui/settings/cloud_drive_settings_page.dart';
+import 'package:tvbox_flutter/ui/settings/web_config_page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -48,6 +48,18 @@ class _SettingsPageState extends State<SettingsPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const SourceManagementPage()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('CatPawOpen 配置'),
+            subtitle: const Text('网盘登录、Cookie 管理等'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const WebConfigPage()),
               );
             },
           ),

@@ -8,9 +8,22 @@
   },
   "author": "",
   "dependencies": {
-    "axios": "^1.6.7"
+    "axios": "^1.6.7",
+    "fastify": "^4.26.0",
+    "node-json-db": "^2.3.0",
+    "cheerio": "^1.0.0-rc.12",
+    "crypto-js": "^4.2.0",
+    "dayjs": "^1.11.10",
+    "hls-parser": "^0.10.8",
+    "iconv-lite": "^0.6.3",
+    "node-rsa": "^1.1.1",
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "antd": "^5.24.3",
+    "copy-to-clipboard": "^3.3.3"
   },
   "devDependencies": {
-    "esbuild": "^0.25.2"
+    "esbuild": "^0.20.1"
   }
 }

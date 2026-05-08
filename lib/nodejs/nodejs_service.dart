@@ -53,9 +53,10 @@ class NodeJSService extends ChangeNotifier {
       if (!_portCompleter!.isCompleted) {
         _portCompleter!.completeError('Timeout waiting for Node.js source server port');
       }
-      return -1;
+      return Future.value(-1);
     }).catchError((e) {
       print('⚠️ Port wait error: $e');
+      return -1;
     });
 
     try {
@@ -217,8 +218,113 @@ class NodeJSService extends ChangeNotifier {
     return result as String;
   }
 
+  // ========== CatPawOpen 专用 API ==========
+
+  /// 获取 catpawopen 配置（包含所有可用 Spider）
+  Future<Map<String, dynamic>> getCatConfig() async {
+    try {
+      final result = await sendRequest('getConfig', {});
+      return result as Map<String, dynamic>;
+    } catch (e) {
+      print('❌ getCatConfig failed: $e');
+      return {};
+    }
+  }
+
+  /// 选择默认 Spider
+  Future<void> setDefaultSpider(String spiderKey, int spiderType) async {
+    try {
+      await sendRequest('setDefaultSpider', {
+        'key': spiderKey,
+        'type': spiderType,
+      });
+    } catch (e) {
+      print('❌ setDefaultSpider failed: $e');
+      rethrow;
+    }
+  }
+
+  /// 获取 Web 配置界面 URL
+  String getWebsiteUrl() {
+    if (_sourceServerPort == null || _sourceServerPort! <= 0) return '';
+    return 'http://127.0.0.1:$_sourceServerPort/website';
+  }
+
+  /// 初始化网盘配置
+  Future<void> initCloudDrive(String type, Map<String, dynamic> config) async {
+    try {
+      await sendRequest('initCloudDrive', {
+        'type': type,
+        'config': config,
+      });
+    } catch (e) {
+      print('❌ initCloudDrive failed: $e');
+      rethrow;
+    }
+  }
+
+  /// 搜索视频（catpawopen 格式）
+  Future<Map<String, dynamic>> searchVideos(String keyword, {int page = 1}) async {
+    try {
+      final result = await sendRequest('search', {
+        'wd': keyword,
+        'page': page,
+      });
+      return result as Map<String, dynamic>;
+    } catch (e) {
+      print('❌ searchVideos failed: $e');
+      return {'list': []};
+    }
+  }
+
+  /// 获取分类内容（catpawopen 格式）
+  Future<Map<String, dynamic>> getCategoryContentCatPaw(
+    String categoryId, 
+    int page, 
+    [Map<String, dynamic>? filters]
+  ) async {
+    try {
+      final result = await sendRequest('getCategoryContent', {
+        'id': categoryId,
+        'page': page,
+        'filters': filters ?? {},
+      });
+      return result as Map<String, dynamic>;
+    } catch (e) {
+      print('❌ getCategoryContentCatPaw failed: $e');
+      return {'list': [], 'page': page, 'pagecount': 0, 'total': 0};
+    }
+  }
+
+  /// 获取视频详情（catpawopen 格式）
+  Future<Map<String, dynamic>> getVideoDetailCatPaw(String videoId) async {
+    try {
+      final result = await sendRequest('getVideoDetail', {'id': videoId});
+      return result as Map<String, dynamic>;
+    } catch (e) {
+      print('❌ getVideoDetailCatPaw failed: $e');
+      return {'list': []};
+    }
+  }
+
+  /// 获取播放地址（catpawopen 格式）
+  Future<Map<String, dynamic>> getPlayUrlCatPaw(String flag, String playId) async {
+    try {
+      final result = await sendRequest('getPlayUrl', {
+        'flag': flag,
+        'id': playId,
+      });
+      return result as Map<String, dynamic>;
+    } catch (e) {
+      print('❌ getPlayUrlCatPaw failed: $e');
+      return {'parse': 0, 'url': ''};
+    }
+  }
+
+  @override
   void dispose() {
     _localHttpServer?.close();
     _channel.invokeMethod('stopNodeJS');
+    super.dispose();
   }
 }
