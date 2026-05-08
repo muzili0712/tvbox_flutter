@@ -26,7 +26,7 @@ jobs:
         with:
           flutter-version: '3.41.6'
           channel: 'stable'
-          cache: true
+          cache: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -44,6 +44,8 @@ jobs:
           flutter clean
           cd ios
           rm -rf Pods Podfile.lock Build Intermediates.noindex DerivedData
+          # 清理 Xcode DerivedData
+          rm -rf ~/Library/Developer/Xcode/DerivedData
           cd ..
           echo "✅ 清理完成"
 
