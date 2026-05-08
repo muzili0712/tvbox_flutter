@@ -11,7 +11,12 @@ import Flutter
         let docsPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
         setenv("NODE_PATH", docsPath, 1)
         
-        let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
+        guard let controller = window?.rootViewController as? FlutterViewController else {
+            print("❌ Failed to get FlutterViewController")
+            GeneratedPluginRegistrant.register(with: self)
+            return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+        }
+        
         let nodeChannel = FlutterMethodChannel(name: "com.tvbox/nodejs", binaryMessenger: controller.binaryMessenger)
         
         nodeChannel.setMethodCallHandler({

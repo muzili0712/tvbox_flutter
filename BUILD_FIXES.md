@@ -28,6 +28,21 @@
 - ✅ 移除 `web_config_page.dart` 中的 `_controller.dispose()` 调用
 - 原因：新版 `webview_flutter` (4.13+) 不再需要手动 dispose
 
+### 6. NodeJSBridge.swift Swift 编译器错误
+- ✅ 移除 `catchException` 方法,简化为直接使用 do-catch
+- 错误：A C function pointer can only be formed from a reference to a 'func' or a literal closure
+- 位置：`ios/Runner/NodeJSBridge.swift:122`
+
+### 7. NodeJSManager.m Block 数组引用错误
+- ✅ 将 `argv` 和 `argc` 声明移到 block 内部
+- 错误：Cannot refer to declaration with an array type inside block
+- 位置：`ios/Runner/NodeJSManager.m:29`
+
+### 8. AppDelegate 启动崩溃 (EXC_BREAKPOINT)
+- ✅ 使用 `guard let` 替代强制解包 `as!`
+- 错误：EXC_BREAKPOINT (SIGTRAP) 在 AppDelegate.application 方法内
+- 原因：强制类型转换失败导致运行时崩溃
+
 ## 需要运行的命令
 
 以下错误需要通过运行 `flutter pub get` 来解决：
