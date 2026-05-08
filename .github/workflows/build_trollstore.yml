@@ -151,8 +151,12 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :BuildSettings:CODE_SIGN_IDENTITY ''" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
           
           echo "=== 使用 Flutter 构建完整 .app ==="
-          flutter build ios --release --no-codesign --no-tree-shake-icons || {
-            echo "Flutter build failed, trying with xcodebuild..."
+          flutter build ios --release --no-codesign --no-tree-shake-icons 2>&1 | tee ios/build.log || {
+            BUILD_EXIT_CODE=$?
+            echo "❌ Flutter build failed with exit code: $BUILD_EXIT_CODE"
+            echo "=== 显示最后 100 行错误日志 ==="
+            tail -n 100 ios/build.log
+            echo "=== 尝试使用 xcodebuild ==="
             
             # 备用方案：使用 xcodebuild
             cd ios
@@ -166,8 +170,16 @@ jobs:
               DEVELOPMENT_TEAM="" \
               ONLY_ACTIVE_ARCH=NO \
               BUILD_DIR="../build/ios" \
-              CONFIGURATION_BUILD_DIR="../build/ios/iphoneos"
+              CONFIGURATION_BUILD_DIR="../build/ios/iphoneos" 2>&1 | tee ../ios/xcodebuild.log
+            XCODE_EXIT_CODE=$?
             cd ..
+            
+            if [ $XCODE_EXIT_CODE -ne 0 ]; then
+              echo "❌ xcodebuild also failed with exit code: $XCODE_EXIT_CODE"
+              echo "=== xcodebuild 错误日志 ==="
+              cat ios/xcodebuild.log || true
+              exit 1
+            fi
           }
           
           APP_PATH="./build/ios/iphoneos/Runner.app"
@@ -210,4 +222,6 @@ jobs:
           name: build-logs
           path: |
             ./ios/build.log
+            ./ios/xcodebuild.log
+            ./build/ios/*.log
           retention-days: 7
