@@ -43,10 +43,8 @@ jobs:
           echo "=== 清理构建目录以避免 Stale file 警告 ==="
           flutter clean
           cd ios
-          pod deintegrate || true
-          rm -rf Pods Podfile.lock
+          rm -rf Pods Podfile.lock Build Intermediates.noindex DerivedData
           cd ..
-          flutter pub get
           echo "✅ 清理完成"
 
       - name: Download NodeMobile.xcframework
@@ -139,6 +137,8 @@ jobs:
         run: |
           echo "=== 安装 CocoaPods ==="
           cd ios
+          # 确保在 pod install 之前没有残留的构建文件
+          rm -rf build Pods Podfile.lock
           pod install --repo-update
           cd ..
 

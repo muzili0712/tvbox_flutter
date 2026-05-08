@@ -14,8 +14,19 @@
 ### 3. iOS 构建 Stale file 警告导致失败
 - ✅ 在 CI 工作流中添加构建前清理步骤
 - 原因：GitHub Actions runner 的 `build/ios/Release-iphoneos/` 目录包含之前构建的残留文件
-- 影响库：`DKPhotoGallery.framework` 和 `DKImagePickerController.framework`
-- 解决方案：执行 `flutter clean` → `pod deintegrate` → `pod install` → `flutter pub get`
+- 影响库：`DKPhotoGallery.framework`、`DKImagePickerController.framework`、`SDWebImage.framework` 等
+- 解决方案：
+  - 在 `flutter clean` 后删除 `ios/Pods`、`ios/Podfile.lock`、`ios/Build` 等目录
+  - 在 `pod install` 之前再次清理确保无残留
+
+### 4. getHomeContent() 返回类型不匹配
+- ✅ 修改 `nodejs_service.dart` 中 `getHomeContent()` 返回类型为 `Future<dynamic>`
+- 原因：CatPawOpen 返回 `Map<String, dynamic>`,旧版 Spider 返回 `List<dynamic>`
+- 修复：`source_provider.dart` 已添加类型检查以兼容两种格式
+
+### 5. WebViewController.dispose() 方法不存在
+- ✅ 移除 `web_config_page.dart` 中的 `_controller.dispose()` 调用
+- 原因：新版 `webview_flutter` (4.13+) 不再需要手动 dispose
 
 ## 需要运行的命令
 
