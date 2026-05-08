@@ -23,12 +23,14 @@
         return;
     }
     
-    const char *argv[] = {"node", [scriptPath UTF8String], NULL};
-    int argc = 2;
+    // 在 block 外部复制需要的数据,避免在 block 内引用数组类型
+    NSString *scriptPathCopy = [scriptPath copy];
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        const char *argv[] = {"node", [scriptPathCopy UTF8String], NULL};
+        int argc = 2;
+        
         int result = node_start(argc, (char **)argv);
-        self.isRunning = NO;
         NSLog(@"Node.js exited with code %d", result);
     });
     
