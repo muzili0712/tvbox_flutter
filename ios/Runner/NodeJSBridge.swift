@@ -43,26 +43,20 @@ class NodeJSBridge: NSObject {
                 return GCDWebServerDataResponse(text: "OK")
             }
             
-            let exception = self.catchException {
-                do {
-                    try self.webServer.start(options: [
-                        GCDWebServerOption_Port: 0,
-                        GCDWebServerOption_BindToLocalhost: true,
-                        GCDWebServerOption_AutomaticallySuspendInBackground: false
-                    ])
-                    self.serverStarted = true
-                    let port = self.webServer.port
-                    setenv("DART_SERVER_PORT", "\(port)", 1)
-                    print("✅ HTTP server started on port \(port)")
-                    DispatchQueue.main.async { completion(true) }
-                } catch {
-                    print("❌ HTTP server start error: \(error)")
-                    DispatchQueue.main.async { completion(false) }
-                }
-            }
-            
-            if exception != nil {
-                print("❌ HTTP server exception")
+            // 直接启动服务器,使用 do-catch 处理错误
+            do {
+                try self.webServer.start(options: [
+                    GCDWebServerOption_Port: 0,
+                    GCDWebServerOption_BindToLocalhost: true,
+                    GCDWebServerOption_AutomaticallySuspendInBackground: false
+                ])
+                self.serverStarted = true
+                let port = self.webServer.port
+                setenv("DART_SERVER_PORT", "\(port)", 1)
+                print("✅ HTTP server started on port \(port)")
+                DispatchQueue.main.async { completion(true) }
+            } catch {
+                print("❌ HTTP server start error: \(error)")
                 DispatchQueue.main.async { completion(false) }
             }
         }
@@ -112,17 +106,5 @@ class NodeJSBridge: NSObject {
             object: nil,
             userInfo: ["message": message]
         )
-    }
-    
-    private func catchException(_ block: @escaping () -> Void) -> NSException? {
-        var result: NSException?
-        let exceptionHandler = { (exception: NSException) in
-            result = exception
-        }
-        let previousHandler = NSGetUncaughtExceptionHandler()
-        NSSetUncaughtExceptionHandler(exceptionHandler)
-        block()
-        NSSetUncaughtExceptionHandler(previousHandler)
-        return result
     }
 }
