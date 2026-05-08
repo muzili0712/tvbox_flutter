@@ -121,7 +121,11 @@ class SourceProvider extends ChangeNotifier {
         // catpawopen 的 home 接口返回格式: { class: [...], filters: {...} }
         if (result is Map<String, dynamic>) {
           final classData = result['class'];
-          _categories = classData is List ? classData : [];
+          if (classData is List) {
+            _categories = classData;
+          } else {
+            _categories = [];
+          }
         } else if (result is List) {
           _categories = result;
         } else {

@@ -125,7 +125,7 @@ class _WebConfigPageState extends State<WebConfigPage> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    // WebViewController 在新版本中不需要手动 dispose
     super.dispose();
   }
 }
