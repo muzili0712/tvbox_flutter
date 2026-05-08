@@ -11,6 +11,12 @@
 - ✅ 修复了 catchError 必须返回值的问题
 - ✅ 添加了 dispose() 方法中的 super.dispose() 调用
 
+### 3. iOS 构建 Stale file 警告导致失败
+- ✅ 在 CI 工作流中添加构建前清理步骤
+- 原因：GitHub Actions runner 的 `build/ios/Release-iphoneos/` 目录包含之前构建的残留文件
+- 影响库：`DKPhotoGallery.framework` 和 `DKImagePickerController.framework`
+- 解决方案：执行 `flutter clean` → `pod deintegrate` → `pod install` → `flutter pub get`
+
 ## 需要运行的命令
 
 以下错误需要通过运行 `flutter pub get` 来解决：

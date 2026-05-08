@@ -38,6 +38,17 @@ jobs:
           gem install cocoapods
           gem install xcodeproj
 
+      - name: Clean iOS Build Directory
+        run: |
+          echo "=== 清理构建目录以避免 Stale file 警告 ==="
+          flutter clean
+          cd ios
+          pod deintegrate || true
+          rm -rf Pods Podfile.lock
+          cd ..
+          flutter pub get
+          echo "✅ 清理完成"
+
       - name: Download NodeMobile.xcframework
         run: |
           echo "=== 下载 NodeMobile.xcframework ==="
