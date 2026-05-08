@@ -157,9 +157,9 @@ class NodeJSService extends ChangeNotifier {
     await sendRequest('loadSource', {'url': url});
   }
 
-  Future<List<dynamic>> getHomeContent() async {
+  Future<dynamic> getHomeContent() async {
     final result = await sendRequest('getHomeContent', {});
-    return result as List<dynamic>;
+    return result;
   }
 
   Future<List<dynamic>> getCategoryContent(String categoryId, int page) async {
