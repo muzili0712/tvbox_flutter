@@ -10,6 +10,7 @@ import 'package:tvbox_flutter/ui/cloud_drive/cloud_drive_page.dart';
 import 'package:tvbox_flutter/ui/live/live_page.dart';
 import 'package:tvbox_flutter/ui/widgets/bottom_nav_bar.dart';
 import 'package:tvbox_flutter/ui/detail/detail_page.dart';
+import 'package:tvbox_flutter/ui/log/log_viewer_page.dart';
 import 'package:tvbox_flutter/models/video_item.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
@@ -148,6 +149,16 @@ class _HomeContentState extends State<HomeContent> with SingleTickerProviderStat
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const SearchPage()),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.code),
+            tooltip: '查看日志',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LogViewerPage()),
               );
             },
           ),
