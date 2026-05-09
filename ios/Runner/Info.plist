@@ -17,7 +17,7 @@
 		<string>DisplayIcon@3x</string>
 	</array>
 	<key>CFBundleIdentifier</key>
-	<string>com.gendago.catpaw</string>
+	<string>com.example.tvboxFlutter</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
