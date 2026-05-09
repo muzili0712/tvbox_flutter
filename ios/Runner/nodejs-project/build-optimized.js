@@ -116,13 +116,16 @@ async function buildMain(websiteBundle) {
     let mainCode = fs.readFileSync(mainFile, 'utf8');
 
     // 在代码前插入website bundle
-    mainCode = websiteBundle + '\n' + mainCode;
+    const bundleWrapper = `
+globalThis.websiteBundle = ${JSON.stringify(websiteBundle)};
+`;
+    mainCode = bundleWrapper + mainCode;
 
     // 构建主程序
     await esbuild.build({
         stdin: {
             contents: mainCode,
-            resolveDir: process.cwd(),
+            resolveDir: path.join(process.cwd(), 'src'),
             sourcefile: 'dev.js',
         },
         outfile: path.join(distDir, 'index.js'),

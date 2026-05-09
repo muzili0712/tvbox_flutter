@@ -91,14 +91,17 @@ async function buildMain(websiteBundle) {
     // 读取源代码
     let mainCode = fs.readFileSync(path.join(process.cwd(), 'src/dev.js'), 'utf8');
 
-    // 在代码末尾嵌入website bundle（在import语句之前）
-    mainCode = websiteBundle + mainCode;
+    // 在代码开头嵌入website bundle（作为全局变量）
+    const bundleWrapper = `
+globalThis.websiteBundle = ${JSON.stringify(websiteBundle)};
+`;
+    mainCode = bundleWrapper + mainCode;
 
     // 打包主代码
     const result = await esbuild.build({
         stdin: {
             contents: mainCode,
-            resolveDir: process.cwd(),
+            resolveDir: path.join(process.cwd(), 'src'),
             sourcefile: 'dev.js',
         },
         outfile: path.join(distDir, 'index.js'),
@@ -109,14 +112,6 @@ async function buildMain(websiteBundle) {
         target: 'node18',
         sourcemap: isDev ? 'inline' : false,
         external: [],
-        plugins: [
-            {
-                name: 'inline-website',
-                setup(build) {
-                    // 已经在stdin中嵌入了website bundle
-                }
-            }
-        ],
         define: {
             'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
             'process.env.DEV_HTTP_PORT': JSON.stringify(process.env.DEV_HTTP_PORT || '3006'),

@@ -1,5 +1,4 @@
 import { createServer } from 'http';
-import {getWebsiteBundle} from "../esbuild-website.js";
 
 globalThis.catServerFactory = (handle) => {
     let port = 0;
@@ -34,7 +33,14 @@ if (nativePort > 0) {
     console.log('📡 Native port configured: ' + nativePort);
 }
 
-eval(await getWebsiteBundle());
+// website bundle 会在构建时由 build.js 嵌入
+if (typeof globalThis.websiteBundle === 'string') {
+    try {
+        eval(globalThis.websiteBundle);
+    } catch (e) {
+        console.log('Website bundle not available (this is normal for production)');
+    }
+}
 
 import { start } from './index.js';
 
