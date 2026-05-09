@@ -56,7 +56,33 @@ class MyApp extends StatelessWidget {
         brightness: Brightness.dark,
       ),
       themeMode: ThemeMode.system,
-      home: const HomePage(),
+      // 临时使用简单页面测试 Flutter 是否正常渲染
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('TVBox Test'),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Hello World!',
+                style: TextStyle(fontSize: 24),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HomePage()),
+                  );
+                },
+                child: const Text('Go to HomePage'),
+              ),
+            ],
+          ),
+        ),
+      ),
       debugShowCheckedModeBanner: false,
     );
   }
