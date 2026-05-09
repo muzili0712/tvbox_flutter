@@ -69,12 +69,18 @@ jobs:
       - name: Build Node.js Project
         run: |
           echo "=== 构建 Node.js 运行时 ==="
-          cd nodejs-project
+          cd ios/Runner/nodejs-project
           npm install
           npm run build
-          cd ..
-          echo "✅ 打包完成"
-          ls -la nodejs-project/dist/
+          cd ../../..
+          echo "✅ Node.js打包完成"
+          ls -la ios/Runner/nodejs-project/dist/
+          
+          # 复制构建产物到Runner目录（确保被Bundle Resources包含）
+          echo "=== 准备Node.js Bundle ==="
+          mkdir -p ios/Runner/Resources
+          cp -r ios/Runner/nodejs-project/dist/* ios/Runner/Resources/
+          ls -la ios/Runner/Resources/
 
       - name: Install Flutter Dependencies & Generate JSON Code
         run: |
@@ -130,8 +136,26 @@ jobs:
           end
           runner_target.source_build_phase.add_file_reference(m_file) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == m_file }
           
+          # 添加 Resources 目录（包含构建后的Node.js代码）
+          resources_path = 'Runner/Resources'
+          resources_ref = runner_group.files.find { |f| f.path == resources_path }
+          if resources_ref.nil?
+            resources_ref = runner_group.new_group('Resources', resources_path)
+            puts "✅ Added Resources group"
+          else
+            puts "✅ Resources group already exists"
+          end
+          
+          # 添加 Resources 到 Copy Bundle Resources phase
+          copy_phase = runner_target.copy_files_build_phases.find { |phase| phase.dst_path == 'Resources' }
+          if copy_phase.nil?
+            copy_phase = runner_target.new_copy_files_build_phase('Copy Bundle Resources')
+            copy_phase.dst_path = 'Resources'
+          end
+          copy_phase.add_file_reference(resources_ref) unless copy_phase.files.any? { |bf| bf.file_ref == resources_ref }
+          
           project.save
-          puts "✅ Project saved"
+          puts "✅ Project saved with Resources"
           EOF
         shell: bash
 
