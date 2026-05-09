@@ -1,0 +1,43 @@
+{
+    "name": "tvbox_nodejs_mobile",
+    "version": "1.0.0",
+    "description": "CatPawOpen Node.js for iOS",
+    "type": "module",
+    "scripts": {
+        "build": "node build.js",
+        "build:dev": "cross-env NODE_ENV=development node build.js",
+        "clean": "rimraf dist"
+    },
+    "dependencies": {
+        "antd": "^5.24.3",
+        "axios": "^1.6.7",
+        "cheerio": "^1.0.0-rc.12",
+        "copy-to-clipboard": "^3.3.3",
+        "crypto-js": "^4.2.0",
+        "dayjs": "^1.11.10",
+        "fastify": "^4.26.0",
+        "hls-parser": "^0.10.8",
+        "iconv-lite": "^0.6.3",
+        "node-json-db": "^2.3.0",
+        "node-rsa": "^1.1.1",
+        "qrcode": "^1.5.4",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0"
+    },
+    "devDependencies": {
+        "@babel/plugin-transform-runtime": "^7.23.9",
+        "@babel/preset-env": "^7.23.9",
+        "@rollup/plugin-babel": "^6.0.4",
+        "@rollup/plugin-commonjs": "^25.0.7",
+        "@rollup/plugin-json": "^6.1.0",
+        "@rollup/plugin-node-resolve": "^15.2.3",
+        "@rollup/plugin-terser": "^0.4.4",
+        "@types/node": "^20.11.14",
+        "cross-env": "^7.0.3",
+        "esbuild": "0.20.1",
+        "eslint": "^8.57.0",
+        "less": "^4.2.2",
+        "rimraf": "^5.0.5",
+        "rollup": "^2.79.1"
+    }
+}
