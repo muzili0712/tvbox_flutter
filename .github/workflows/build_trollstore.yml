@@ -83,58 +83,57 @@ jobs:
           echo "=== 生成 JSON 序列化代码 ==="
           dart run build_runner build --delete-conflicting-outputs || echo "Build runner completed with warnings"
 
-      # 临时禁用:添加 NodeJSBridge 和 NodeJSManager 到 Xcode 项目(排查黑屏问题)
-      # - name: Add NodeJSBridge and NodeJSManager to Xcode project
-      #   run: |
-      #     ruby <<-'EOF'
-      #     require 'xcodeproj'
-      #     project_path = 'ios/Runner.xcodeproj'
-      #     project = Xcodeproj::Project.open(project_path)
-      #     runner_target = project.targets.find { |t| t.name == 'Runner' }
-      #     unless runner_target
-      #       puts "❌ Runner target not found"
-      #       exit 1
-      #     end
-      #     main_group = project.main_group
-      #     runner_group = main_group.groups.find { |g| g.name == 'Runner' || g.path == 'Runner' }
-      #     unless runner_group
-      #       puts "❌ Runner group not found"
-      #       exit 1
-      #     end
-      #     
-      #     # 添加 NodeJSBridge.swift
-      #     swift_file = runner_group.files.find { |f| f.path == 'NodeJSBridge.swift' }
-      #     if swift_file.nil?
-      #       swift_file = runner_group.new_file('NodeJSBridge.swift')
-      #       puts "✅ Added NodeJSBridge.swift"
-      #     else
-      #       puts "✅ NodeJSBridge.swift already exists"
-      #     end
-      #     runner_target.source_build_phase.add_file_reference(swift_file) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == swift_file }
-      #     
-      #     # 添加 NodeJSManager.h
-      #     h_file = runner_group.files.find { |f| f.path == 'NodeJSManager.h' }
-      #     if h_file.nil?
-      #       h_file = runner_group.new_file('NodeJSManager.h')
-      #       puts "✅ Added NodeJSManager.h"
-      #     else
-      #       puts "✅ NodeJSManager.h already exists"
-      #     end
-      #     
-      #     # 添加 NodeJSManager.m
-      #     m_file = runner_group.files.find { |f| f.path == 'NodeJSManager.m' }
-      #     if m_file.nil?
-      #       m_file = runner_group.new_file('NodeJSManager.m')
-      #       puts "✅ Added NodeJSManager.m"
-      #     else
-      #       puts "✅ NodeJSManager.m already exists"
-      #     end
-      #     runner_target.source_build_phase.add_file_reference(m_file) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == m_file }
-      #     
-      #     project.save
-      #     puts "✅ Project saved"
-      #     EOF
-      #   shell: bash
+      - name: Add NodeJSBridge and NodeJSManager to Xcode project
+        run: |
+          ruby <<-'EOF'
+          require 'xcodeproj'
+          project_path = 'ios/Runner.xcodeproj'
+          project = Xcodeproj::Project.open(project_path)
+          runner_target = project.targets.find { |t| t.name == 'Runner' }
+          unless runner_target
+            puts "❌ Runner target not found"
+            exit 1
+          end
+          main_group = project.main_group
+          runner_group = main_group.groups.find { |g| g.name == 'Runner' || g.path == 'Runner' }
+          unless runner_group
+            puts "❌ Runner group not found"
+            exit 1
+          end
+          
+          # 添加 NodeJSBridge.swift
+          swift_file = runner_group.files.find { |f| f.path == 'NodeJSBridge.swift' }
+          if swift_file.nil?
+            swift_file = runner_group.new_file('NodeJSBridge.swift')
+            puts "✅ Added NodeJSBridge.swift"
+          else
+            puts "✅ NodeJSBridge.swift already exists"
+          end
+          runner_target.source_build_phase.add_file_reference(swift_file) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == swift_file }
+          
+          # 添加 NodeJSManager.h
+          h_file = runner_group.files.find { |f| f.path == 'NodeJSManager.h' }
+          if h_file.nil?
+            h_file = runner_group.new_file('NodeJSManager.h')
+            puts "✅ Added NodeJSManager.h"
+          else
+            puts "✅ NodeJSManager.h already exists"
+          end
+          
+          # 添加 NodeJSManager.m
+          m_file = runner_group.files.find { |f| f.path == 'NodeJSManager.m' }
+          if m_file.nil?
+            m_file = runner_group.new_file('NodeJSManager.m')
+            puts "✅ Added NodeJSManager.m"
+          else
+            puts "✅ NodeJSManager.m already exists"
+          end
+          runner_target.source_build_phase.add_file_reference(m_file) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == m_file }
+          
+          project.save
+          puts "✅ Project saved"
+          EOF
+        shell: bash
 
       - name: Install iOS Pods
         run: |
