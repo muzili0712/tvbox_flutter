@@ -222,8 +222,11 @@ jobs:
           echo "=== 验证并修复 App Bundle 配置 ==="
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Runner" "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.example.tvboxFlutter" "$APP_PATH/Info.plist"
-          echo "✅ Bundle ID 已设置为: $(/usr/libexec/PlistBuddy -c "Get :CFBundleIdentifier" "$APP_PATH/Info.plist")"
-          echo "✅ 应用显示名: $(/usr/libexec/PlistBuddy -c "Get :CFBundleDisplayName" "$APP_PATH/Info.plist")"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName TvBoxFlutter" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName TvBoxFlutter" "$APP_PATH/Info.plist"
+          echo "✅ Bundle ID: $(/usr/libexec/PlistBuddy -c "Get :CFBundleIdentifier" "$APP_PATH/Info.plist")"
+          echo "✅ Display Name: $(/usr/libexec/PlistBuddy -c "Get :CFBundleDisplayName" "$APP_PATH/Info.plist")"
+          echo "✅ Bundle Name: $(/usr/libexec/PlistBuddy -c "Get :CFBundleName" "$APP_PATH/Info.plist")"
           
           echo "=== 打包 TrollStore IPA ==="
           mkdir -p ./Build
