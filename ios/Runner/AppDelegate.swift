@@ -38,7 +38,7 @@ import UIKit
             switch call.method {
             case "startNodeJS":
                 print("📱 Received startNodeJS request")
-                NodeJSManager.shared().startNodeJSWithScriptPath("index.js") { success in
+                NodeJSManager.shared().startNodeJS(withScriptPath: "index.js") { success in
                     result(success)
                 }
                 
