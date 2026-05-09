@@ -11,18 +11,12 @@ class NodeJSService extends ChangeNotifier {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
-  // Node.js 源服务的端口（Fastify 服务端口）
   int? _sourceServerPort;
   int? get sourceServerPort => _sourceServerPort;
 
-  // Node.js 控制服务的端口（接收来自 Flutter 指令的端口）
-  int? _controlServerPort;
+  int? _nativeServerPort;
+  int? get nativeServerPort => _nativeServerPort;
 
-  // 本地 HTTP 服务器（用于接收 Node.js 的回调，即 catDartServerPort）
-  HttpServer? _localHttpServer;
-  int get localServerPort => _localHttpServer?.port ?? 0;
-
-  // 等待 Node.js 源服务端口就绪的 Completer
   Completer<int>? _portCompleter;
 
   NodeJSService._internal();
@@ -30,26 +24,29 @@ class NodeJSService extends ChangeNotifier {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    // 1. 启动本地 HTTP 服务器，用于接收 Node.js 的回调
-    await _startLocalHttpServer();
+    print('🚀 Starting Node.js initialization...');
 
-    // 2. 通过 MethodChannel 通知原生端启动 Node.js 运行时
     try {
+      // 获取本地服务器端口（由 iOS 层启动）
+      _nativeServerPort = await _channel.invokeMethod('getNativeServerPort');
+      print('📡 Native server port: $_nativeServerPort');
+      
+      // 通知 iOS 层启动 Node.js
       _isInitialized = await _channel.invokeMethod('startNodeJS');
+      
       if (!_isInitialized) {
         throw Exception('Node.js failed to start');
       }
-      print('✅ Node.js service initialized via native bridge');
+      print('✅ Node.js process started successfully');
     } catch (e) {
       print('❌ Failed to initialize Node.js: $e');
       _isInitialized = false;
       return;
     }
 
-    // 3. 等待 Node.js 源服务端口就绪（通过 /onCatPawOpenPort 回调设置）
+    // 等待 Node.js 源服务端口
     _portCompleter = Completer<int>();
     
-    // 启动超时定时器
     final timeoutTimer = Timer(const Duration(seconds: 15), () {
       if (_portCompleter != null && !_portCompleter!.isCompleted) {
         print('⚠️ Timeout waiting for Node.js source server port');
@@ -64,7 +61,7 @@ class NodeJSService extends ChangeNotifier {
       if (_sourceServerPort != null && _sourceServerPort! > 0) {
         print('✅ Node.js source server ready on port $_sourceServerPort');
       } else {
-        print('⚠️ Node.js source server port not received, using fallback');
+        print('⚠️ Node.js source server port not received');
       }
     } catch (e) {
       print('❌ Node.js source server port error: $e');
@@ -75,57 +72,20 @@ class NodeJSService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 启动本地 HTTP 服务器，监听 Node.js 的回调请求
-  Future<void> _startLocalHttpServer() async {
-    _localHttpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    print('📡 Local HTTP server started on port ${_localHttpServer!.port}');
-
-    _localHttpServer!.listen((HttpRequest request) {
-      final path = request.uri.path;
-      if (path == '/onCatPawOpenPort') {
-        final portStr = request.uri.queryParameters['port'];
-        if (portStr != null) {
-          final port = int.tryParse(portStr);
-          if (port != null) {
-            _sourceServerPort = port;
-            print('🐱 Received source server port: $port');
-            if (_portCompleter != null && !_portCompleter!.isCompleted) {
-              _portCompleter!.complete(port);
-            }
-          }
-        }
-        request.response.statusCode = 200;
-        request.response.write('OK');
-        request.response.close();
-      } else if (path == '/msg') {
-        // 接收来自 Node.js 的主动消息（如事件推送）
-        request.listen((List<int> data) {
-          final body = utf8.decode(data);
-          print('📨 Message from Node.js: $body');
-          // 可通过 Notification 或回调传递到 UI 层
-        }, onDone: () {
-          request.response.statusCode = 200;
-          request.response.write('OK');
-          request.response.close();
-        }, onError: (e) {
-          request.response.statusCode = 500;
-          request.response.close();
-        });
-      } else {
-        request.response.statusCode = 404;
-        request.response.close();
-      }
-    });
+  void onNodePortReceived(int port) {
+    print('📡 Received Node.js port from iOS: $port');
+    _sourceServerPort = port;
+    if (_portCompleter != null && !_portCompleter!.isCompleted) {
+      _portCompleter!.complete(port);
+    }
   }
 
-  /// 发送请求到 Node.js 控制服务（或源服务），支持回调
   Future<dynamic> sendRequest(String action, Map<String, dynamic> params) async {
     if (!_isInitialized) {
       throw Exception('Node.js service not initialized');
     }
 
-    // 确保源服务端口已知
-    if (_sourceServerPort == null) {
+    if (_sourceServerPort == null || _sourceServerPort! <= 0) {
       throw Exception('Node.js source server port unknown');
     }
 

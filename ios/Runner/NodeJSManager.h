@@ -10,8 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)stopNodeJS;
 - (void)sendMessage:(NSString *)message completion:(void (^)(id _Nullable result, NSError * _Nullable error))completion;
 
-// 用于设置 Node 服务端口（由 HTTP 服务器回调设置）
-- (void)setNodeServerPort:(int)port;
+- (int)getNativeServerPort;
+- (int)getNodeServerPort;
 
 @end
 
