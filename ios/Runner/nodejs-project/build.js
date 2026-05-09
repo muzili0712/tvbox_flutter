@@ -98,7 +98,7 @@ globalThis.websiteBundle = ${JSON.stringify(websiteBundle)};
     mainCode = bundleWrapper + mainCode;
 
     // 打包主代码
-    const result = await esbuild.build({
+    await esbuild.build({
         stdin: {
             contents: mainCode,
             resolveDir: path.join(process.cwd(), 'src'),
@@ -119,7 +119,10 @@ globalThis.websiteBundle = ${JSON.stringify(websiteBundle)};
         }
     });
 
-    console.log(`  Output size: ${(result.outputFiles[0].contents.length / 1024).toFixed(2)} KB`);
+    // 读取输出文件获取大小
+    const outputFile = path.join(distDir, 'index.js');
+    const stats = fs.statSync(outputFile);
+    console.log(`  Output size: ${(stats.size / 1024).toFixed(2)} KB`);
 }
 
 async function copyConfig() {
@@ -128,7 +131,7 @@ async function copyConfig() {
     if (fs.existsSync(configFile)) {
         let configCode = fs.readFileSync(configFile, 'utf8');
         // 打包配置文件
-        const result = await esbuild.build({
+        await esbuild.build({
             entryPoints: [configFile],
             outfile: path.join(distDir, 'index.config.js'),
             bundle: true,
@@ -138,7 +141,8 @@ async function copyConfig() {
             target: 'node18',
         });
 
-        const md5 = createHash('md5').update(fs.readFileSync(path.join(distDir, 'index.config.js'))).digest('hex');
+        const configPath = path.join(distDir, 'index.config.js');
+        const md5 = createHash('md5').update(fs.readFileSync(configPath)).digest('hex');
         fs.writeFileSync(path.join(distDir, 'index.config.js.md5'), md5);
         console.log(`  Config MD5: ${md5}`);
     }
