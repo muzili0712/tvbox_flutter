@@ -286,7 +286,6 @@ class NodeJSService extends ChangeNotifier {
 
   @override
   void dispose() {
-    _localHttpServer?.close();
     _channel.invokeMethod('stopNodeJS');
     super.dispose();
   }

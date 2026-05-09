@@ -16,9 +16,23 @@ globalThis.catServerFactory = (handle) => {
     return server;
 };
 
+// 处理命令行参数，获取 native-port
+let nativePort = 0;
+const args = process.argv;
+for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--native-port' && i + 1 < args.length) {
+        nativePort = parseInt(args[i + 1], 10);
+        break;
+    }
+}
+
 globalThis.catDartServerPort = () => {
-    return 0;
+    return nativePort;
 };
+
+if (nativePort > 0) {
+    console.log('📡 Native port configured: ' + nativePort);
+}
 
 eval(await getWebsiteBundle());
 

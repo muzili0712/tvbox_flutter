@@ -62,7 +62,28 @@ export async function start(config) {
     server.register(router);
     server.register(website, { prefix: '/website' });
     // 注意 一定要监听ipv4地址 build后 app中使用时 端口使用0让系统自动分配可用端口
-    server.listen({ port: process.env['DEV_HTTP_PORT'] || 0, host: '0.0.0.0' });
+    server.listen({ port: process.env['DEV_HTTP_PORT'] || 0, host: '0.0.0.0' }, async (err, address) => {
+        if (err) {
+            console.error('Server start error:', err);
+            return;
+        }
+        console.log(`Server running at ${address}`);
+        
+        // 通知iOS层服务器已启动，并传递端口
+        const nativePort = catDartServerPort();
+        if (nativePort > 0) {
+            const portMatch = address.match(/:(\d+)/);
+            if (portMatch) {
+                const serverPort = parseInt(portMatch[1], 10);
+                try {
+                    await axios.get(`http://127.0.0.1:${nativePort}/onCatPawOpenPort?port=${serverPort}`);
+                    console.log(`✅ Notified native app of server port: ${serverPort}`);
+                } catch (error) {
+                    console.error('Failed to notify native app:', error.message);
+                }
+            }
+        }
+    });
 }
 
 /**
