@@ -2,6 +2,7 @@
 #import <NodeMobile/NodeMobile.h>
 #import <GCDWebServer/GCDWebServer.h>
 #import <GCDWebServer/GCDWebServerDataRequest.h>
+#import <GCDWebServer/GCDWebServerDataResponse.h>
 #import <GCDWebServer/GCDWebServerResponse.h>
 
 @interface NodeJSManager ()
