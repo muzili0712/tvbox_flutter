@@ -137,7 +137,7 @@ jobs:
           runner_target.source_build_phase.add_file_reference(m_file) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == m_file }
           
           # 添加 Resources 目录（包含构建后的Node.js代码）
-          resources_path = 'Runner/Resources'
+          resources_path = 'Resources'
           resources_ref = runner_group.files.find { |f| f.path == resources_path }
           if resources_ref.nil?
             resources_ref = runner_group.new_group('Resources', resources_path)
