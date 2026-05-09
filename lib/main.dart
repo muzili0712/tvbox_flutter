@@ -11,12 +11,16 @@ import 'package:tvbox_flutter/ui/home/home_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  print('🚀 App starting...');
+  
   // 异步初始化 Node.js 服务,不阻塞应用启动
   NodeJSService.instance.initialize().then((_) {
     print('✅ Node.js service initialized successfully');
   }).catchError((e) {
     print('⚠️ Node.js initialization failed, continuing without it: $e');
   });
+  
+  print('📱 Running app...');
   
   runApp(
     MultiProvider(
@@ -30,6 +34,8 @@ void main() async {
       child: const MyApp(),
     ),
   );
+  
+  print('✅ App launched');
 }
 
 class MyApp extends StatelessWidget {

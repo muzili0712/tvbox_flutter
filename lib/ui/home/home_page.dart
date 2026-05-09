@@ -25,13 +25,29 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   late TabController _tabController;
   bool _isLoading = true;
 
-  final List<Widget> _pages = const [
-    HomeContent(),
-    LivePage(),
-    CloudDrivePage(),
-    HistoryPage(),
-    FavoritePage(),
-  ];
+  // 懒加载页面列表,避免所有页面同时初始化
+  List<Widget>? _pages;
+  
+  Widget _getPage(int index) {
+    if (_pages == null) {
+      _pages = List.filled(5, const SizedBox.shrink());
+    }
+    
+    switch (index) {
+      case 0:
+        return const HomeContent();
+      case 1:
+        return const LivePage();
+      case 2:
+        return const CloudDrivePage();
+      case 3:
+        return const HistoryPage();
+      case 4:
+        return const FavoritePage();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 
   @override
   void initState() {
@@ -71,7 +87,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages[_selectedIndex],
+      body: _getPage(_selectedIndex),
       bottomNavigationBar: BottomNavBar(
         selectedIndex: _selectedIndex,
         onItemTapped: _onItemTapped,
