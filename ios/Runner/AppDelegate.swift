@@ -1,22 +1,21 @@
-import UIKit
 import Flutter
+import UIKit
 
-@UIApplicationMain
-@objc class AppDelegate: FlutterAppDelegate {
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
     override func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         print("🚀 AppDelegate.application called")
-
-        GeneratedPluginRegistrant.register(with: self)
-
-        print("✅ Plugins registered")
-
         let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
-
-        print("✅ Application launched successfully")
-
+        print("✅ Application launched with result: \(result)")
         return result
+    }
+
+    func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+        print("🔧 Initializing Flutter engine")
+        GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+        print("✅ Plugins registered")
     }
 }
