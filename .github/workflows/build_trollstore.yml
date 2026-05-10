@@ -62,8 +62,11 @@ jobs:
         run: |
           set -e
           echo "=== Building iOS app ==="
-          cd ios
           
+          # First, get Flutter dependencies (this creates Generated.xcconfig)
+          flutter pub get
+          
+          cd ios
           pod install --repo-update
           
           cd ..
