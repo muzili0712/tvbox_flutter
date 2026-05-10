@@ -23,21 +23,32 @@
     return instance;
 }
 
+- (void)startNodeJS:(void (^)(BOOL))completion {
+    NSString *scriptPath = [[NSBundle mainBundle] pathForResource:@"main" ofType:@"js" inDirectory:@"nodejs-project/dist"];
+    if (!scriptPath) {
+        scriptPath = [[NSBundle mainBundle] pathForResource:@"main" ofType:@"js"];
+    }
+    
+    if (scriptPath) {
+        [self startNodeJSWithScriptPath:scriptPath completion:completion];
+    } else {
+        NSLog(@"Node.js script not found!");
+        if (completion) completion(NO);
+    }
+}
+
 - (void)startNodeJSWithScriptPath:(NSString *)scriptPath completion:(void (^)(BOOL))completion {
     if (self.isRunning) {
         if (completion) completion(YES);
         return;
     }
     
-    // 1. 启动本地 HTTP 服务器，监听 Node.js 的回调
     [self startLocalWebServer];
     
-    // 2. 在后台线程启动 Node.js
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *scriptPathCopy = [scriptPath copy];
         int nativePort = self.nativeServerPort;
         
-        // 构造参数：node <script> --native-port <port>
         NSMutableArray *args = [NSMutableArray arrayWithObjects:@"node", scriptPathCopy, @"--native-port", [NSString stringWithFormat:@"%d", nativePort], nil];
         
         int argc = (int)args.count;
@@ -47,12 +58,11 @@
         }
         argv[argc] = NULL;
         
-        NSLog(@"🚀 Starting Node.js with script: %@, native-port: %d", scriptPathCopy, nativePort);
+        NSLog(@"Starting Node.js with script: %@, native-port: %d", scriptPathCopy, nativePort);
         
         int result = node_start(argc, argv);
         NSLog(@"Node.js exited with code %d", result);
         
-        // 释放内存
         for (int i = 0; i < argc; i++) {
             free(argv[i]);
         }
@@ -71,18 +81,16 @@
     
     __weak typeof(self) weakSelf = self;
     
-    // 处理 /onCatPawOpenPort 回调 - Node.js 通知我们它的端口
     [self.webServer addHandlerForMethod:@"GET" path:@"/onCatPawOpenPort" requestClass:[GCDWebServerDataRequest class] processBlock:^GCDWebServerResponse * _Nullable(GCDWebServerDataRequest * _Nonnull request) {
         NSString *portStr = request.query[@"port"];
         if (portStr) {
             int port = [portStr intValue];
             weakSelf.nodeServerPort = port;
-            NSLog(@"📡 Received Node.js server port: %d", port);
+            NSLog(@"Received Node.js server port: %d", port);
         }
         return [GCDWebServerDataResponse responseWithText:@"OK"];
     }];
     
-    // 处理 /msg 回调 - Node.js 发送的消息
     [self.webServer addHandlerForMethod:@"POST" path:@"/msg" requestClass:[GCDWebServerDataRequest class] processBlock:^GCDWebServerResponse * _Nullable(GCDWebServerDataRequest * _Nonnull request) {
         NSData *data = request.data;
         if (data) {
@@ -91,19 +99,17 @@
             if (!error && json) {
                 NSString *action = json[@"action"];
                 if ([action isEqualToString:@"ready"]) {
-                    // Node.js 准备就绪
                     if (json[@"port"]) {
                         weakSelf.nodeServerPort = [json[@"port"] intValue];
-                        NSLog(@"✅ Node.js ready on port: %d", weakSelf.nodeServerPort);
+                        NSLog(@"Node.js ready on port: %d", weakSelf.nodeServerPort);
                     }
                 }
-                NSLog(@"📨 Message from Node.js: %@", action);
+                NSLog(@"Message from Node.js: %@", action);
             }
         }
         return [GCDWebServerDataResponse responseWithText:@"OK"];
     }];
     
-    // 启动服务器，端口 0 表示自动选择可用端口
     NSError *error;
     [self.webServer startWithOptions:@{
         GCDWebServerOption_Port: @0,
@@ -111,10 +117,10 @@
     } error:&error];
     
     if (error) {
-        NSLog(@"❌ Failed to start web server: %@", error);
+        NSLog(@"Failed to start web server: %@", error);
     } else {
         self.nativeServerPort = (int)self.webServer.port;
-        NSLog(@"📡 Local web server started on port: %d", self.nativeServerPort);
+        NSLog(@"Local web server started on port: %d", self.nativeServerPort);
     }
 }
 
@@ -146,6 +152,14 @@
         }
     }];
     [task resume];
+}
+
+- (void)setNodeServerPort:(int)port {
+    self.nodeServerPort = port;
+}
+
+- (int)getNativeServerPort {
+    return self.nativeServerPort;
 }
 
 - (int)getNodeServerPort {
