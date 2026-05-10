@@ -6,14 +6,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)shared;
 
-- (void)startNodeJSWithScriptPath:(NSString *)scriptPath completion:(void (^)(BOOL success))completion;
 - (void)startNodeJS:(void (^)(BOOL success))completion;
 - (void)stopNodeJS;
-- (void)sendMessage:(NSString *)message completion:(void (^)(id _Nullable result, NSError * _Nullable error))completion;
-
-- (void)setNodeServerPort:(int)port;
 - (int)getNativeServerPort;
-- (int)getNodeServerPort;
 
 @end
 

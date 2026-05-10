@@ -2,26 +2,10 @@ import fastify from 'fastify';
 import router from './router.js';
 import { JsonDB, Config } from 'node-json-db';
 import axios from 'axios';
-import website from "./website/index.js";
-import {getIPAddress} from "./util/network.js";
 
 let server = null;
 
-/**
- * Start the server with the given configuration.
- *
- * Be careful that start will be called multiple times when
- * work with catvodapp. If the server is already running,
- * the stop will be called by engine before start, make sure
- * to return new server every time.
- *
- * @param {Map} config - the config of the server
- * @return {void}
- */
 export async function start(config) {
-    /**
-     * @type {import('fastify').FastifyInstance}
-     */
     server = fastify({
         serverFactory: catServerFactory,
         forceCloseConnections: true,
@@ -46,7 +30,7 @@ export async function start(config) {
     };
     server.address = function () {
         const result = this.server.address();
-        result.url = `http://${getIPAddress()}:${result.port}`;
+        result.url = `http://${result.address}:${result.port}`;
         result.dynamic = 'js2p://_WEB_';
         return result;
     };
@@ -57,39 +41,11 @@ export async function start(config) {
     });
     server.stop = false;
     server.config = config;
-    // 推荐使用NODE_PATH做db存储的更目录，这个目录在应用中清除缓存时会被清空
     server.db = new JsonDB(new Config((process.env['NODE_PATH'] || '.') + '/db.json', true, true, '/', true));
     server.register(router);
-    server.register(website, { prefix: '/website' });
-    // 注意 一定要监听ipv4地址 build后 app中使用时 端口使用0让系统自动分配可用端口
-    server.listen({ port: process.env['DEV_HTTP_PORT'] || 0, host: '0.0.0.0' }, async (err, address) => {
-        if (err) {
-            console.error('Server start error:', err);
-            return;
-        }
-        console.log(`Server running at ${address}`);
-        
-        // 通知iOS层服务器已启动，并传递端口
-        const nativePort = catDartServerPort();
-        if (nativePort > 0) {
-            const portMatch = address.match(/:(\d+)/);
-            if (portMatch) {
-                const serverPort = parseInt(portMatch[1], 10);
-                try {
-                    await axios.get(`http://127.0.0.1:${nativePort}/onCatPawOpenPort?port=${serverPort}`);
-                    console.log(`✅ Notified native app of server port: ${serverPort}`);
-                } catch (error) {
-                    console.error('Failed to notify native app:', error.message);
-                }
-            }
-        }
-    });
+    server.listen({ port: process.env['DEV_HTTP_PORT'] || 0, host: '127.0.0.1' });
 }
 
-/**
- * Stop the server if it exists.
- *
- */
 export async function stop() {
     if (server) {
         server.close();
