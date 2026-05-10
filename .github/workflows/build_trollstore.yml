@@ -59,19 +59,6 @@ jobs:
             ls -la dist/
           fi
 
-      - name: Copy Node.js files to Runner
-        run: |
-          set -e
-          echo "=== Copying Node.js files to Runner ==="
-
-          mkdir -p ios/Runner/nodejs-project/dist
-
-          cp -r ios/Runner/nodejs-project/dist/* ios/Runner/
-          cp -r ios/Runner/nodejs-project/src/* ios/Runner/nodejs-project/dist/ 2>/dev/null || true
-
-          echo "✅ Files copied"
-          ls -la ios/Runner/
-
       - name: Build iOS App
         run: |
           set -e
@@ -84,6 +71,26 @@ jobs:
 
           cd ..
           flutter build ios --release --no-codesign --no-tree-shake-icons
+
+      - name: Copy Node.js files to App Bundle
+        run: |
+          set -e
+          echo "=== Copying Node.js files to App Bundle ==="
+
+          APP_PATH=$(find build/ios -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ App bundle not found"
+            exit 1
+          fi
+
+          echo "Found app: $APP_PATH"
+
+          mkdir -p "$APP_PATH/nodejs-project/dist"
+          cp ios/Runner/nodejs-project/dist/index.js "$APP_PATH/nodejs-project/dist/"
+          cp ios/Runner/nodejs-project/dist/index.js.md5 "$APP_PATH/nodejs-project/dist/" 2>/dev/null || true
+
+          echo "✅ Node.js files copied to app bundle"
+          ls -la "$APP_PATH/nodejs-project/dist/"
 
       - name: Prepare IPA
         id: prepare
