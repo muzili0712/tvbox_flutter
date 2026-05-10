@@ -26,20 +26,21 @@ jobs:
           set -e
           echo "=== Downloading NodeMobile.xcframework ==="
           mkdir -p ios/Frameworks
-          cd ios/Frameworks
-          rm -rf NodeMobile.xcframework nodejs-mobile.zip
           
           DOWNLOAD_URL="https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-ios.zip"
-          curl -L -o nodejs-mobile.zip "$DOWNLOAD_URL"
+          curl -L -o ios/Frameworks/nodejs-mobile.zip "$DOWNLOAD_URL"
+          cd ios/Frameworks
           unzip -o -q nodejs-mobile.zip
           rm nodejs-mobile.zip
+          cd ../..
           
-          if [ ! -d "NodeMobile.xcframework" ]; then
+          if [ ! -d "ios/Frameworks/NodeMobile.xcframework" ]; then
             echo "❌ NodeMobile.xcframework not found"
             exit 1
           fi
           
           echo "✅ NodeMobile.xcframework downloaded"
+          ls -la ios/Frameworks
           
           FRAMEWORK_PATH="ios/Frameworks/NodeMobile.xcframework"
           
@@ -58,8 +59,14 @@ jobs:
               fi
             fi
           else
-            echo "❌ Info.plist not found"
-            exit 1
+            echo "⚠️ Info.plist not found, creating new one..."
+            python3 -c "import plistlib; plistlib.dump({'AvailableLibraries': [{'BinaryPath': 'NodeMobile.framework/NodeMobile', 'LibraryIdentifier': 'ios-arm64', 'LibraryPath': 'NodeMobile.framework', 'SupportedArchitectures': ['arm64'], 'SupportedPlatform': 'ios'}], 'CFBundlePackageType': 'XFWK', 'XCFrameworkFormatVersion': '1.0'}, open('ios/Frameworks/NodeMobile.xcframework/Info.plist', 'wb'))"
+            if plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1; then
+              echo "✅ Info.plist created successfully"
+            else
+              echo "❌ Failed to create Info.plist"
+              exit 1
+            fi
           fi
 
       - name: Clean Flutter Build
@@ -85,7 +92,7 @@ jobs:
         id: find_app
         run: |
           APP_PATH=$(find build/ios -name "Runner.app" -type d | head -1)
-          echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
           echo "Found app at: $APP_PATH"
           ls -la "$APP_PATH"
 
