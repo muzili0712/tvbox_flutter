@@ -5,7 +5,7 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
     private var nodeJSChannel: FlutterMethodChannel?
     private var eventChannel: FlutterEventChannel?
-    private var eventSink: FlutterEventSink?
+    fileprivate var eventSink: FlutterEventSink?
 
     override func application(
         _ application: UIApplication,
