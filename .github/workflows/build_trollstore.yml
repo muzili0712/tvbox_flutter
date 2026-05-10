@@ -164,16 +164,21 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             BUILD_DIR="../build" \
             CONFIGURATION_BUILD_DIR="../build/Release-iphoneos" \
-            clean build 2>&1 | tee ../ios/xcodebuild.log
+            -quiet \
+            clean build > ../ios/xcodebuild.log 2>&1
 
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          BUILD_EXIT_CODE=$?
           cd ..
 
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo "❌ xcodebuild failed with exit code: $BUILD_EXIT_CODE"
-            echo "=== xcodebuild 错误日志 ==="
-            cat ios/xcodebuild.log
+            echo "=== xcodebuild 错误日志 (最后100行) ==="
+            tail -n 100 ios/xcodebuild.log
             exit 1
+          else
+            echo "✅ xcodebuild 构建成功"
+            echo "=== 构建产物路径 ==="
+            tail -n 20 ios/xcodebuild.log | grep -E "CompileSwift|Linking|Build|SUCCEEDED"
           fi
 
       - name: Verify .app Bundle
