@@ -4,6 +4,8 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
     private var nodeJSChannel: FlutterMethodChannel?
+    private var eventChannel: FlutterEventChannel?
+    private var eventSink: FlutterEventSink?
     
     override func application(
         _ application: UIApplication,
@@ -21,6 +23,7 @@ import UIKit
         print("✅ Plugins registered")
         
         setupNodeJSChannel(with: engineBridge.pluginRegistry)
+        setupEventChannel(with: engineBridge.pluginRegistry)
     }
     
     private func setupNodeJSChannel(with registrar: FlutterPluginRegistry) {
@@ -38,13 +41,12 @@ import UIKit
             switch call.method {
             case "startNodeJS":
                 print("📱 Received startNodeJS request")
-                NodeJSManager.shared().startNodeJS(withScriptPath: "index.js") { success in
+                NodeJSManager.shared().startNodeJS { success in
                     result(success)
                 }
                 
             case "getNativeServerPort":
                 print("📱 Received getNativeServerPort request")
-                // 等待服务器启动
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     let port = NodeJSManager.shared().getNativeServerPort()
                     result(port)
@@ -58,6 +60,57 @@ import UIKit
             default:
                 result(FlutterMethodNotImplemented)
             }
+        }
+    }
+    
+    private func setupEventChannel(with registrar: FlutterPluginRegistry) {
+        guard let controller = window?.rootViewController as? FlutterViewController else {
+            print("❌ Cannot get FlutterViewController for event channel")
+            return
+        }
+        
+        eventChannel = FlutterEventChannel(
+            name: "com.tvbox/nodejs/events",
+            binaryMessenger: controller.binaryMessenger
+        )
+        
+        eventChannel?.setStreamHandler(NodeEventStreamHandler.shared)
+        NodeEventStreamHandler.shared.setAppDelegate(self)
+    }
+    
+    func onNodePortReceived(_ port: Int) {
+        print("📡 Notifying Flutter: Node.js port = \(port)")
+        eventSink?(port)
+    }
+}
+
+class NodeEventStreamHandler: NSObject, FlutterStreamHandler {
+    static let shared = NodeEventStreamHandler()
+    private weak var appDelegate: AppDelegate?
+    
+    func setAppDelegate(_ delegate: AppDelegate) {
+        self.appDelegate = delegate
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNodePortNotification(_:)),
+            name: NSNotification.Name("NodeServerPortReceived"),
+            object: nil
+        )
+    }
+    
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        appDelegate?.eventSink = events
+        return nil
+    }
+    
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        appDelegate?.eventSink = nil
+        return nil
+    }
+    
+    @objc private func handleNodePortNotification(_ notification: Notification) {
+        if let port = notification.userInfo?["port"] as? Int {
+            appDelegate?.onNodePortReceived(port)
         }
     }
 }

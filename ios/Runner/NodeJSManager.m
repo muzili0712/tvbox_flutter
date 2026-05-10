@@ -87,6 +87,11 @@
             int port = [portStr intValue];
             weakSelf.nodeServerPort = port;
             NSLog(@"Received Node.js server port: %d", port);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[NSNotificationCenter defaultCenter] postNotificationName:@"NodeServerPortReceived"
+                                                                object:nil
+                                                              userInfo:@{@"port": @(port)}];
+            });
         }
         return [GCDWebServerDataResponse responseWithText:@"OK"];
     }];

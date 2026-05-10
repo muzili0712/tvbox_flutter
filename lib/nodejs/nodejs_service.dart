@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 class NodeJSService extends ChangeNotifier {
   static final NodeJSService instance = NodeJSService._internal();
   static const MethodChannel _channel = MethodChannel('com.tvbox/nodejs');
+  static const EventChannel _eventChannel = EventChannel('com.tvbox/nodejs/events');
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
@@ -18,20 +19,34 @@ class NodeJSService extends ChangeNotifier {
   int? get nativeServerPort => _nativeServerPort;
 
   Completer<int>? _portCompleter;
+  StreamSubscription<dynamic>? _eventSubscription;
 
   NodeJSService._internal();
+
+  void _setupEventListener() {
+    _eventSubscription = _eventChannel.receiveBroadcastStream().listen(
+      (dynamic event) {
+        if (event is int) {
+          onNodePortReceived(event);
+        }
+      },
+      onError: (dynamic error) {
+        print('❌ Event channel error: $error');
+      },
+    );
+  }
 
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     print('🚀 Starting Node.js initialization...');
 
+    _setupEventListener();
+
     try {
-      // 获取本地服务器端口（由 iOS 层启动）
       _nativeServerPort = await _channel.invokeMethod('getNativeServerPort');
       print('📡 Native server port: $_nativeServerPort');
       
-      // 通知 iOS 层启动 Node.js
       _isInitialized = await _channel.invokeMethod('startNodeJS');
       
       if (!_isInitialized) {
@@ -44,7 +59,6 @@ class NodeJSService extends ChangeNotifier {
       return;
     }
 
-    // 等待 Node.js 源服务端口
     _portCompleter = Completer<int>();
     
     final timeoutTimer = Timer(const Duration(seconds: 15), () {
@@ -114,8 +128,6 @@ class NodeJSService extends ChangeNotifier {
     }
   }
 
-  // ========== 以下为业务 API，保持不变 ==========
-
   Future<void> loadSource(String url) async {
     await sendRequest('loadSource', {'url': url});
   }
@@ -181,9 +193,6 @@ class NodeJSService extends ChangeNotifier {
     return result as String;
   }
 
-  // ========== CatPawOpen 专用 API ==========
-
-  /// 获取 catpawopen 配置（包含所有可用 Spider）
   Future<Map<String, dynamic>> getCatConfig() async {
     try {
       final result = await sendRequest('getConfig', {});
@@ -194,7 +203,6 @@ class NodeJSService extends ChangeNotifier {
     }
   }
 
-  /// 选择默认 Spider
   Future<void> setDefaultSpider(String spiderKey, int spiderType) async {
     try {
       await sendRequest('setDefaultSpider', {
@@ -207,13 +215,11 @@ class NodeJSService extends ChangeNotifier {
     }
   }
 
-  /// 获取 Web 配置界面 URL
   String getWebsiteUrl() {
     if (_sourceServerPort == null || _sourceServerPort! <= 0) return '';
     return 'http://127.0.0.1:$_sourceServerPort/website';
   }
 
-  /// 初始化网盘配置
   Future<void> initCloudDrive(String type, Map<String, dynamic> config) async {
     try {
       await sendRequest('initCloudDrive', {
@@ -226,7 +232,6 @@ class NodeJSService extends ChangeNotifier {
     }
   }
 
-  /// 搜索视频（catpawopen 格式）
   Future<Map<String, dynamic>> searchVideos(String keyword, {int page = 1}) async {
     try {
       final result = await sendRequest('search', {
@@ -240,7 +245,6 @@ class NodeJSService extends ChangeNotifier {
     }
   }
 
-  /// 获取分类内容（catpawopen 格式）
   Future<Map<String, dynamic>> getCategoryContentCatPaw(
     String categoryId, 
     int page, 
@@ -259,7 +263,6 @@ class NodeJSService extends ChangeNotifier {
     }
   }
 
-  /// 获取视频详情（catpawopen 格式）
   Future<Map<String, dynamic>> getVideoDetailCatPaw(String videoId) async {
     try {
       final result = await sendRequest('getVideoDetail', {'id': videoId});
@@ -270,7 +273,6 @@ class NodeJSService extends ChangeNotifier {
     }
   }
 
-  /// 获取播放地址（catpawopen 格式）
   Future<Map<String, dynamic>> getPlayUrlCatPaw(String flag, String playId) async {
     try {
       final result = await sendRequest('getPlayUrl', {
@@ -287,6 +289,7 @@ class NodeJSService extends ChangeNotifier {
   @override
   void dispose() {
     _channel.invokeMethod('stopNodeJS');
+    _eventSubscription?.cancel();
     super.dispose();
   }
 }
