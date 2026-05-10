@@ -2,6 +2,7 @@
 #import <NodeMobile/NodeMobile.h>
 #import <GCDWebServer/GCDWebServer.h>
 #import <GCDWebServer/GCDWebServerDataRequest.h>
+#import <GCDWebServer/GCDWebServerDataResponse.h>
 
 @interface NodeJSManager ()
 @property (nonatomic, assign) BOOL isRunning;
