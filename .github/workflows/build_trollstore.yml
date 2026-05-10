@@ -225,6 +225,9 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Runner" "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.example.tvboxFlutter" "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleName TvBoxFlutter" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.4.0" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$APP_PATH/Info.plist"
 
           echo "=== 验证最终 Info.plist ==="
           plutil -lint "$APP_PATH/Info.plist"
