@@ -38,15 +38,17 @@ jobs:
           gem install cocoapods
           gem install xcodeproj
 
-      - name: Clean iOS Build Directory
+      - name: Clean ALL Build Directories
         run: |
-          echo "=== 清理构建目录以避免 Stale file 警告 ==="
+          echo "=== 深度清理构建目录 ==="
           flutter clean
           cd ios
           rm -rf Pods Podfile.lock Build Intermediates.noindex DerivedData
-          # 清理 Xcode DerivedData
           rm -rf ~/Library/Developer/Xcode/DerivedData
           cd ..
+          rm -rf build/
+          rm -rf ios/build/
+          rm -rf Build/
           echo "✅ 清理完成"
 
       - name: Download NodeMobile.xcframework
@@ -76,20 +78,18 @@ jobs:
           echo "✅ Node.js打包完成"
           ls -la ios/Runner/nodejs-project/dist/
           
-          # 复制构建产物到Runner目录（确保被Bundle Resources包含）
+          # 复制构建产物到Runner目录
           echo "=== 准备Node.js Bundle ==="
           mkdir -p ios/Runner/Resources
           cp -r ios/Runner/nodejs-project/dist/* ios/Runner/Resources/
           ls -la ios/Runner/Resources/
 
-      - name: Install Flutter Dependencies & Generate JSON Code
+      - name: Install Flutter Dependencies
         run: |
           echo "=== 安装 Flutter 依赖 ==="
           flutter pub get
-          echo "=== 生成 JSON 序列化代码 ==="
-          dart run build_runner build --delete-conflicting-outputs || echo "Build runner completed with warnings"
 
-      - name: Add NodeJSBridge and NodeJSManager to Xcode project
+      - name: Configure Xcode Project for TrollStore
         run: |
           ruby <<-'EOF'
           require 'xcodeproj'
@@ -100,62 +100,49 @@ jobs:
             puts "❌ Runner target not found"
             exit 1
           end
+          
+          # 禁用代码签名
+          runner_target.build_configurations.each do |config|
+            config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+            config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+            config.build_settings['CODE_SIGN_IDENTITY'] = ''
+            config.build_settings['DEVELOPMENT_TEAM'] = ''
+            config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''
+            config.build_settings['PROVISIONING_PROFILE'] = ''
+            config.build_settings['CODE_SIGN_ENTITLEMENTS'] = ''
+            config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.example.tvboxFlutter'
+          end
+          
+          # 添加NodeJSBridge和NodeJSManager
           main_group = project.main_group
           runner_group = main_group.groups.find { |g| g.name == 'Runner' || g.path == 'Runner' }
-          unless runner_group
-            puts "❌ Runner group not found"
-            exit 1
+          
+          # 添加 Swift 文件
+          ['NodeJSBridge.swift', 'NodeJSManager.h', 'NodeJSManager.m'].each do |filename|
+            file_ref = runner_group.files.find { |f| f.path == filename }
+            unless file_ref
+              file_ref = runner_group.new_file(filename)
+              puts "✅ Added #{filename}"
+            end
+            if filename.end_with?('.swift', '.m')
+              runner_target.source_build_phase.add_file_reference(file_ref) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == file_ref }
+            end
           end
           
-          # 添加 NodeJSBridge.swift
-          swift_file = runner_group.files.find { |f| f.path == 'NodeJSBridge.swift' }
-          if swift_file.nil?
-            swift_file = runner_group.new_file('NodeJSBridge.swift')
-            puts "✅ Added NodeJSBridge.swift"
-          else
-            puts "✅ NodeJSBridge.swift already exists"
-          end
-          runner_target.source_build_phase.add_file_reference(swift_file) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == swift_file }
-          
-          # 添加 NodeJSManager.h
-          h_file = runner_group.files.find { |f| f.path == 'NodeJSManager.h' }
-          if h_file.nil?
-            h_file = runner_group.new_file('NodeJSManager.h')
-            puts "✅ Added NodeJSManager.h"
-          else
-            puts "✅ NodeJSManager.h already exists"
-          end
-          
-          # 添加 NodeJSManager.m
-          m_file = runner_group.files.find { |f| f.path == 'NodeJSManager.m' }
-          if m_file.nil?
-            m_file = runner_group.new_file('NodeJSManager.m')
-            puts "✅ Added NodeJSManager.m"
-          else
-            puts "✅ NodeJSManager.m already exists"
-          end
-          runner_target.source_build_phase.add_file_reference(m_file) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == m_file }
-          
-          # 添加 Resources 目录（包含构建后的Node.js代码）
+          # 添加 Resources 目录
           resources_path = 'Resources'
           resources_ref = runner_group.files.find { |f| f.path == resources_path }
-          if resources_ref.nil?
+          unless resources_ref
             resources_ref = runner_group.new_group('Resources', resources_path)
             puts "✅ Added Resources group"
-          else
-            puts "✅ Resources group already exists"
           end
           
           # 添加 Resources 到 Copy Bundle Resources phase
-          copy_phase = runner_target.copy_files_build_phases.find { |phase| phase.dst_path == 'Resources' }
-          if copy_phase.nil?
-            copy_phase = runner_target.new_copy_files_build_phase('Copy Bundle Resources')
-            copy_phase.dst_path = 'Resources'
-          end
+          copy_phase = runner_target.resources_build_phase
           copy_phase.add_file_reference(resources_ref) unless copy_phase.files.any? { |bf| bf.file_ref == resources_ref }
           
           project.save
-          puts "✅ Project saved with Resources"
+          puts "✅ Project saved with TrollStore configuration"
           EOF
         shell: bash
 
@@ -163,83 +150,169 @@ jobs:
         run: |
           echo "=== 安装 CocoaPods ==="
           cd ios
-          # 确保在 pod install 之前没有残留的构建文件
-          rm -rf build Pods Podfile.lock
+          rm -rf Pods Podfile.lock
           pod install --repo-update
           cd ..
 
-      - name: Build TVBox (TrollStore)
+      - name: Build TVBox with xcodebuild (direct)
         run: |
-          echo "=== 配置 Xcode 项目 ==="
+          echo "=== 直接使用 xcodebuild 构建 ==="
           
-          # 设置 CODE_SIGNING_REQUIRED = NO
-          /usr/libexec/PlistBuddy -c "Set :BuildSettings:CODE_SIGNING_REQUIRED NO" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Set :BuildSettings:CODE_SIGN_IDENTITY ''" ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -arch arm64 \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            BUILD_DIR="../build" \
+            CONFIGURATION_BUILD_DIR="../build/Release-iphoneos" \
+            clean build 2>&1 | tee ../ios/xcodebuild.log
           
-          echo "=== 使用 Flutter 构建完整 .app ==="
-          flutter build ios --release --no-codesign --no-tree-shake-icons 2>&1 | tee ios/build.log || {
-            BUILD_EXIT_CODE=$?
-            echo "❌ Flutter build failed with exit code: $BUILD_EXIT_CODE"
-            echo "=== 显示最后 100 行错误日志 ==="
-            tail -n 100 ios/build.log
-            echo "=== 尝试使用 xcodebuild ==="
-            
-            # 备用方案：使用 xcodebuild
-            cd ios
-            xcodebuild -workspace Runner.xcworkspace \
-              -scheme Runner \
-              -configuration Release \
-              -sdk iphoneos \
-              -arch arm64 \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGN_IDENTITY="" \
-              DEVELOPMENT_TEAM="" \
-              ONLY_ACTIVE_ARCH=NO \
-              BUILD_DIR="../build/ios" \
-              CONFIGURATION_BUILD_DIR="../build/ios/iphoneos" 2>&1 | tee ../ios/xcodebuild.log
-            XCODE_EXIT_CODE=$?
-            cd ..
-            
-            if [ $XCODE_EXIT_CODE -ne 0 ]; then
-              echo "❌ xcodebuild also failed with exit code: $XCODE_EXIT_CODE"
-              echo "=== xcodebuild 错误日志 ==="
-              cat ios/xcodebuild.log || true
-              exit 1
-            fi
-          }
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          cd ..
           
-          APP_PATH="./build/ios/iphoneos/Runner.app"
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ xcodebuild failed with exit code: $BUILD_EXIT_CODE"
+            echo "=== xcodebuild 错误日志 ==="
+            cat ios/xcodebuild.log
+            exit 1
+          fi
+
+      - name: Verify .app Bundle
+        run: |
+          APP_PATH="./build/Release-iphoneos/Runner.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "❌ 构建失败：未找到 Runner.app"
-            ls -la build/ios/ || true
+            echo "查找构建产物..."
+            ls -la build/
+            ls -la build/ios/ 2>/dev/null || true
+            ls -la build/Release-iphoneos/ 2>/dev/null || true
             exit 1
           fi
           
-          echo "✅ Flutter 构建成功，.app 大小: $(du -sh "$APP_PATH" | cut -f1)"
+          echo "✅ 找到 .app bundle，大小: $(du -sh "$APP_PATH" | cut -f1)"
+          echo "=== .app 内容 ==="
+          ls -la "$APP_PATH"
+
+      - name: Clean and Fix App Bundle
+        run: |
+          APP_PATH="./build/Release-iphoneos/Runner.app"
           
+          echo "=== 清理并修复 .app bundle ==="
+          
+          # 1. 设置可执行权限
           chmod +x "$APP_PATH/Runner"
           
-          echo "=== 验证并修复 App Bundle 配置 ==="
-          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Runner" "$APP_PATH/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.example.tvboxFlutter" "$APP_PATH/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName TvBoxFlutter" "$APP_PATH/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleName TvBoxFlutter" "$APP_PATH/Info.plist"
-          echo "✅ Bundle ID: $(/usr/libexec/PlistBuddy -c "Get :CFBundleIdentifier" "$APP_PATH/Info.plist")"
-          echo "✅ Display Name: $(/usr/libexec/PlistBuddy -c "Get :CFBundleDisplayName" "$APP_PATH/Info.plist")"
-          echo "✅ Bundle Name: $(/usr/libexec/PlistBuddy -c "Get :CFBundleName" "$APP_PATH/Info.plist")"
+          # 2. 删除所有签名相关文件
+          echo "删除 _CodeSignature..."
+          rm -rf "$APP_PATH/_CodeSignature"
+          echo "删除 CodeResources..."
+          rm -rf "$APP_PATH/CodeResources"
+          rm -rf "$APP_PATH/embedded.mobileprovision"
           
-          echo "=== 打包 TrollStore IPA ==="
+          # 3. 创建并配置正确的 Info.plist
+          echo "创建正确的 Info.plist..."
+          cat > "$APP_PATH/Info.plist" << 'INFO_PLIST_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh-Hans</string>
+	<key>CFBundleDisplayName</key>
+	<string>TvBoxFlutter</string>
+	<key>CFBundleExecutable</key>
+	<string>Runner</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.example.tvboxFlutter</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>TvBoxFlutter</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.4.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>MinimumOSVersion</key>
+	<string>14.0</string>
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>1</integer>
+		<integer>2</integer>
+	</array>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
+INFO_PLIST_EOF
+          
+          echo "=== 验证最终 Info.plist ==="
+          plutil -lint "$APP_PATH/Info.plist"
+          if [ $? -ne 0 ]; then
+            echo "❌ Info.plist 验证失败！"
+            cat "$APP_PATH/Info.plist"
+            exit 1
+          fi
+          
+          echo "✅ Info.plist 验证成功"
+          echo "Bundle ID: $(/usr/libexec/PlistBuddy -c "Get :CFBundleIdentifier" "$APP_PATH/Info.plist")"
+          echo "Display Name: $(/usr/libexec/PlistBuddy -c "Get :CFBundleDisplayName" "$APP_PATH/Info.plist")"
+          
+          # 4. 检查 .app 目录结构
+          echo -e "\n=== 最终 .app 结构 ==="
+          ls -la "$APP_PATH"
+
+      - name: Build TrollStore IPA
+        run: |
+          APP_PATH="./build/Release-iphoneos/Runner.app"
+          
+          echo "=== 构建 TrollStore IPA ==="
           mkdir -p ./Build
           TEMP_DIR=$(mktemp -d)
           mkdir -p "$TEMP_DIR/Payload"
           cp -r "$APP_PATH" "$TEMP_DIR/Payload/"
           cd "$TEMP_DIR"
-          zip -r "$GITHUB_WORKSPACE/Build/tvbox-Flutter-TrollStore.ipa" Payload
+          
+          # 使用最佳的 zip 选项（不包含额外属性）
+          zip -r -q -X "$GITHUB_WORKSPACE/Build/tvbox-Flutter-TrollStore.ipa" Payload
           cd "$GITHUB_WORKSPACE"
           rm -rf "$TEMP_DIR"
           
-          echo "✅ IPA 已生成: ./Build/tvbox-Flutter-TrollStore.ipa"
-          ls -lh ./Build/
+          if [ ! -f "./Build/tvbox-Flutter-TrollStore.ipa" ]; then
+            echo "❌ IPA 构建失败！"
+            exit 1
+          fi
+          
+          echo "✅ IPA 已成功生成: ./Build/tvbox-Flutter-TrollStore.ipa"
+          echo "IPA 大小: $(du -sh ./Build/tvbox-Flutter-TrollStore.ipa | cut -f1)"
+          echo -e "\n=== IPA 内容 ==="
+          unzip -l ./Build/tvbox-Flutter-TrollStore.ipa
 
       - name: Upload IPA
         if: success()
@@ -255,7 +328,6 @@ jobs:
         with:
           name: build-logs
           path: |
-            ./ios/build.log
             ./ios/xcodebuild.log
             ./build/ios/*.log
           retention-days: 7
