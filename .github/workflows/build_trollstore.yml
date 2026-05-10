@@ -21,12 +21,12 @@ jobs:
           channel: 'stable'
           cache: false
 
-      - name: Download NodeMobile.xcframework
+      - name: Download and Setup NodeMobile.xcframework
         run: |
           echo "=== Downloading NodeMobile.xcframework ==="
           mkdir -p ios/Frameworks
           cd ios/Frameworks
-          rm -rf NodeMobile.xcframework
+          rm -rf NodeMobile.xcframework nodejs-mobile.zip
           
           DOWNLOAD_URL="https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-ios.zip"
           curl -L -o nodejs-mobile.zip "$DOWNLOAD_URL"
@@ -34,48 +34,22 @@ jobs:
           rm nodejs-mobile.zip
           
           if [ ! -d "NodeMobile.xcframework" ]; then
-            echo "❌ NodeMobile.xcframework not found after extraction"
+            echo "❌ NodeMobile.xcframework not found"
             exit 1
           fi
           
           echo "✅ NodeMobile.xcframework downloaded"
-          ls -la
-
-      - name: Validate NodeMobile.xcframework
-        run: |
-          echo "=== Validating NodeMobile.xcframework ==="
+          
+          echo "=== Fixing Info.plist if needed ==="
           FRAMEWORK_PATH="ios/Frameworks/NodeMobile.xcframework"
           
-          if [ ! -f "$FRAMEWORK_PATH/Info.plist" ]; then
-            echo "❌ Info.plist not found"
-            exit 1
-          fi
-          
-          echo "Validating Info.plist format..."
-          plutil -lint "$FRAMEWORK_PATH/Info.plist"
+          plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1
           if [ $? -ne 0 ]; then
-            echo "❌ Invalid Info.plist format, generating new one..."
-            
-            INFO_PLIST_B64="PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPCFET0NUWVBFIHNwbGljZXMgcHVibGljICItLy9BcHBsZS8vRFREIFBM
-SVNUIDEuMC8vRU4iICJodHRwOi8vd3d3LmFwcGxlLmNvbS9EVEQvUHJvcGVydHktMS4wL01EIiA/Pgo8cGxpc3QgdmVyc2lvbj0iMS4wIj4K
-PGRpY3Q+Cgk8a2V5PkF2YWlsYWJsZUxpYnJhcmllczA8L2tleT4KCTxhcnJheT4KCQk8ZGljdD4KCQkJPGtleT5CaW5hcnlQYXRo
-PC9rZXk+CgkJCTxzdHJpbmc+Tm9kZU1vYmlsZS5mcmFtZXdvcmsvTm9kZU1vYmlsZTwvc3RyaW5nPgoJCQk8a2V5PkxpYnJhcnlJ
-ZGVudGlmaWVyPC9rZXk+CgkJCTxzdHJpbmc+aW9zLWFybTY0PC9zdHJpbmc+CgkJCTxrZXk+TGlicmFyeVBhdGg8L2tleT4KCQkJ
-PHN0cmluZz5Ob2RlTW9iaWxlLmZyYW1ld29yazwvc3RyaW5nPgoJCQk8a2V5PlN1cHBvcnRlZEFyY2hpdGVjdHVyZXM8L2tleT4K
-CQkJPHN0cmluZz5hcm02NDwvc3RyaW5nPgoJCQk8a2V5PlN1cHBvcnRlZFBsYXRmb3JtPC9rZXk+CgkJCTxzdHJpbmc+aW9zPC9z
-dHJpbmc+CgkJPC9kaWN0PgoJPC9hcnJheT4KCTxrZXk+Q0ZCdW5kbGVQYWNrYWdlVHlwZTwva2V5PgoJPHN0cmluZz5YRldSSzwv
-c3RyaW5nPgoJPGtleT5YQ0ZyYW1ld29ya0Zvcm1hdFZlcnNpb248L2tleT4KCTxzdHJpbmc+MS4wPC9zdHJpbmc+CjwvZGljdD4K
-PC9wbGlzdD4K"
-            
-            echo "$INFO_PLIST_B64" | base64 -d > "$FRAMEWORK_PATH/Info.plist"
-            
+            echo "Regenerating Info.plist..."
+            PLIST='<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>AvailableLibraries</key><array><dict><key>BinaryPath</key><string>NodeMobile.framework/NodeMobile</string><key>LibraryIdentifier</key><string>ios-arm64</string><key>LibraryPath</key><string>NodeMobile.framework</string><key>SupportedArchitectures</key><array><string>arm64</string></array><key>SupportedPlatform</key><string>ios</string></dict></array><key>CFBundlePackageType</key><string>XFWK</string><key>XCFrameworkFormatVersion</key><string>1.0</string></dict></plist>'
+            echo "$PLIST" > "$FRAMEWORK_PATH/Info.plist"
             plutil -lint "$FRAMEWORK_PATH/Info.plist"
-            if [ $? -eq 0 ]; then
-              echo "✅ Info.plist generated successfully"
-            else
-              echo "❌ Failed to generate Info.plist"
-              exit 1
-            fi
+            echo "✅ Info.plist fixed"
           else
             echo "✅ Info.plist is valid"
           fi
