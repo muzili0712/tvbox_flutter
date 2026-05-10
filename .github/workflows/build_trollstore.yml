@@ -40,108 +40,55 @@ jobs:
           fi
           
           echo "✅ NodeMobile.xcframework downloaded"
-          ls -la ios/Frameworks
-          
-          FRAMEWORK_PATH="ios/Frameworks/NodeMobile.xcframework"
-          
-          if [ -f "$FRAMEWORK_PATH/Info.plist" ]; then
-            echo "Checking Info.plist..."
-            if plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1; then
-              echo "✅ Info.plist is valid"
-            else
-              echo "⚠️ Info.plist is invalid, creating new one..."
-              python3 -c "import plistlib; plistlib.dump({'AvailableLibraries': [{'BinaryPath': 'NodeMobile.framework/NodeMobile', 'LibraryIdentifier': 'ios-arm64', 'LibraryPath': 'NodeMobile.framework', 'SupportedArchitectures': ['arm64'], 'SupportedPlatform': 'ios'}], 'CFBundlePackageType': 'XFWK', 'XCFrameworkFormatVersion': '1.0'}, open('ios/Frameworks/NodeMobile.xcframework/Info.plist', 'wb'))"
-              if plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1; then
-                echo "✅ Info.plist created successfully"
-              else
-                echo "❌ Failed to create Info.plist"
-                exit 1
-              fi
-            fi
-          else
-            echo "⚠️ Info.plist not found, creating new one..."
-            python3 -c "import plistlib; plistlib.dump({'AvailableLibraries': [{'BinaryPath': 'NodeMobile.framework/NodeMobile', 'LibraryIdentifier': 'ios-arm64', 'LibraryPath': 'NodeMobile.framework', 'SupportedArchitectures': ['arm64'], 'SupportedPlatform': 'ios'}], 'CFBundlePackageType': 'XFWK', 'XCFrameworkFormatVersion': '1.0'}, open('ios/Frameworks/NodeMobile.xcframework/Info.plist', 'wb'))"
-            if plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1; then
-              echo "✅ Info.plist created successfully"
-            else
-              echo "❌ Failed to create Info.plist"
-              exit 1
-            fi
-          fi
 
       - name: Build Node.js Project
         run: |
           set -e
           echo "=== Building Node.js project ==="
-          
           cd ios/Runner/nodejs-project
           
-          # Install dependencies if needed
           if [ ! -d "node_modules" ]; then
-            echo "Installing npm dependencies..."
-            npm install 2>&1 | tail -5
+            npm install 2>&1 | tail -3
           fi
           
-          # Build the project
-          echo "Building with esbuild..."
           node build-optimized.js 2>&1 || node build.js 2>&1
           
-          # Check if dist was created
-          if [ -d "dist" ]; then
+          if [ -d "dist" ] && [ -f "dist/index.js" ]; then
+            cp dist/index.js dist/main.js
             echo "✅ Node.js build successful"
-            ls -la dist/
-            
-            # Create main.js as entry point
-            if [ -f "dist/index.js" ]; then
-              cp dist/index.js dist/main.js
-              echo "✅ main.js created"
-            fi
-          else
-            echo "❌ dist directory not created"
-            exit 1
           fi
 
-      - name: Clean Flutter Build
+      - name: Build iOS App
         run: |
-          flutter clean
-          rm -rf ios/Pods
-          rm -rf ios/Podfile.lock
-          rm -rf build
-
-      - name: Install Flutter Dependencies
-        run: flutter pub get
-
-      - name: Install CocoaPods
-        run: |
+          set -e
+          echo "=== Building iOS app ==="
           cd ios
+          
           pod install --repo-update
-
-      - name: Build with Flutter
-        run: |
+          
+          cd ..
           flutter build ios --release --no-codesign --no-tree-shake-icons
 
-      - name: Find .app Bundle
-        id: find_app
+      - name: Prepare IPA
+        id: prepare
         run: |
-          APP_PATH=$(find build/ios -name "Runner.app" -type d | head -1)
-          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
-          echo "Found app at: $APP_PATH"
-          ls -la "$APP_PATH"
-
-      - name: Fix Bundle and Clean Signing
-        run: |
-          APP_PATH="${{ steps.find_app.outputs.app_path }}"
+          echo "=== Preparing IPA ==="
           
-          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
-            echo "Error: App bundle not found"
+          # Find the app bundle
+          APP_PATH=$(find build/ios -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ App bundle not found"
             exit 1
           fi
-
-          echo "Cleaning signature files..."
+          
+          echo "Found app: $APP_PATH"
+          
+          # Clean all signature files
           rm -rf "$APP_PATH/_CodeSignature"
           rm -rf "$APP_PATH/embedded.mobileprovision"
-
-          echo "Fixing Info.plist..."
+          rm -rf "$APP_PATH/CodeResources" 2>/dev/null || true
+          
+          # Fix Info.plist
           PLIST="$APP_PATH/Info.plist"
           
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.example.tvboxFlutter" "$PLIST"
@@ -152,32 +99,25 @@ jobs:
           
           if ! /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST" > /dev/null 2>&1; then
             /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
-          else
-            /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST"
           fi
-
-          echo "Final Info.plist:"
-          plutil -p "$PLIST"
-
-      - name: Create IPA
-        run: |
-          APP_PATH="${{ steps.find_app.outputs.app_path }}"
+          
+          echo "✅ Info.plist configured"
+          
+          # Create IPA
           TEMP_DIR=$(mktemp -d)
           mkdir -p "$TEMP_DIR/Payload"
           cp -r "$APP_PATH" "$TEMP_DIR/Payload/"
           
           mkdir -p Build
           cd "$TEMP_DIR"
-          zip -r -q -X "$GITHUB_WORKSPACE/Build/tvbox-Flutter-TrollStore.ipa" Payload
-          cd "$GITHUB_WORKSPACE"
-          rm -rf "$TEMP_DIR"
-
-          echo "IPA created successfully!"
-          ls -lh Build/
+          zip -r -q -X "$GITHUB_WORKSPACE/Build/TvBoxFlutter.ipa" Payload
+          
+          echo "✅ IPA created"
+          ls -lh "$GITHUB_WORKSPACE/Build/TvBoxFlutter.ipa"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: tvbox-Flutter-TrollStore
-          path: Build/tvbox-Flutter-TrollStore.ipa
+          name: TvBoxFlutter-TrollStore
+          path: Build/TvBoxFlutter.ipa
           retention-days: 30
