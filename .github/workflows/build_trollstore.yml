@@ -69,6 +69,38 @@ jobs:
             fi
           fi
 
+      - name: Build Node.js Project
+        run: |
+          set -e
+          echo "=== Building Node.js project ==="
+          
+          cd ios/Runner/nodejs-project
+          
+          # Install dependencies if needed
+          if [ ! -d "node_modules" ]; then
+            echo "Installing npm dependencies..."
+            npm install 2>&1 | tail -5
+          fi
+          
+          # Build the project
+          echo "Building with esbuild..."
+          node build-optimized.js 2>&1 || node build.js 2>&1
+          
+          # Check if dist was created
+          if [ -d "dist" ]; then
+            echo "✅ Node.js build successful"
+            ls -la dist/
+            
+            # Create main.js as entry point
+            if [ -f "dist/index.js" ]; then
+              cp dist/index.js dist/main.js
+              echo "✅ main.js created"
+            fi
+          else
+            echo "❌ dist directory not created"
+            exit 1
+          fi
+
       - name: Clean Flutter Build
         run: |
           flutter clean
