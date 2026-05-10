@@ -77,8 +77,7 @@ jobs:
           cd ../../..
           echo "✅ Node.js打包完成"
           ls -la ios/Runner/nodejs-project/dist/
-          
-          # 复制构建产物到Runner目录
+
           echo "=== 准备Node.js Bundle ==="
           mkdir -p ios/Runner/Resources
           cp -r ios/Runner/nodejs-project/dist/* ios/Runner/Resources/
@@ -91,7 +90,7 @@ jobs:
 
       - name: Configure Xcode Project for TrollStore
         run: |
-          ruby <<-'EOF'
+          ruby << 'RUBYEOF'
           require 'xcodeproj'
           project_path = 'ios/Runner.xcodeproj'
           project = Xcodeproj::Project.open(project_path)
@@ -100,8 +99,7 @@ jobs:
             puts "❌ Runner target not found"
             exit 1
           end
-          
-          # 禁用代码签名
+
           runner_target.build_configurations.each do |config|
             config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
             config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
@@ -112,12 +110,10 @@ jobs:
             config.build_settings['CODE_SIGN_ENTITLEMENTS'] = ''
             config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.example.tvboxFlutter'
           end
-          
-          # 添加NodeJSBridge和NodeJSManager
+
           main_group = project.main_group
           runner_group = main_group.groups.find { |g| g.name == 'Runner' || g.path == 'Runner' }
-          
-          # 添加 Swift 文件
+
           ['NodeJSBridge.swift', 'NodeJSManager.h', 'NodeJSManager.m'].each do |filename|
             file_ref = runner_group.files.find { |f| f.path == filename }
             unless file_ref
@@ -128,23 +124,20 @@ jobs:
               runner_target.source_build_phase.add_file_reference(file_ref) unless runner_target.source_build_phase.files.any? { |bf| bf.file_ref == file_ref }
             end
           end
-          
-          # 添加 Resources 目录
+
           resources_path = 'Resources'
           resources_ref = runner_group.files.find { |f| f.path == resources_path }
           unless resources_ref
             resources_ref = runner_group.new_group('Resources', resources_path)
             puts "✅ Added Resources group"
           end
-          
-          # 添加 Resources 到 Copy Bundle Resources phase
+
           copy_phase = runner_target.resources_build_phase
           copy_phase.add_file_reference(resources_ref) unless copy_phase.files.any? { |bf| bf.file_ref == resources_ref }
-          
+
           project.save
           puts "✅ Project saved with TrollStore configuration"
-          EOF
-        shell: bash
+          RUBYEOF
 
       - name: Install iOS Pods
         run: |
@@ -154,10 +147,10 @@ jobs:
           pod install --repo-update
           cd ..
 
-      - name: Build TVBox with xcodebuild (direct)
+      - name: Build TVBox with xcodebuild
         run: |
           echo "=== 直接使用 xcodebuild 构建 ==="
-          
+
           cd ios
           xcodebuild -workspace Runner.xcworkspace \
             -scheme Runner \
@@ -172,10 +165,10 @@ jobs:
             BUILD_DIR="../build" \
             CONFIGURATION_BUILD_DIR="../build/Release-iphoneos" \
             clean build 2>&1 | tee ../ios/xcodebuild.log
-          
+
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           cd ..
-          
+
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo "❌ xcodebuild failed with exit code: $BUILD_EXIT_CODE"
             echo "=== xcodebuild 错误日志 ==="
@@ -194,121 +187,67 @@ jobs:
             ls -la build/Release-iphoneos/ 2>/dev/null || true
             exit 1
           fi
-          
+
           echo "✅ 找到 .app bundle，大小: $(du -sh "$APP_PATH" | cut -f1)"
-          echo "=== .app 内容 ==="
           ls -la "$APP_PATH"
 
       - name: Clean and Fix App Bundle
         run: |
           APP_PATH="./build/Release-iphoneos/Runner.app"
-          
+
           echo "=== 清理并修复 .app bundle ==="
-          
-          # 1. 设置可执行权限
+
           chmod +x "$APP_PATH/Runner"
-          
-          # 2. 删除所有签名相关文件
-          echo "删除 _CodeSignature..."
+
+          echo "删除签名文件..."
           rm -rf "$APP_PATH/_CodeSignature"
-          echo "删除 CodeResources..."
           rm -rf "$APP_PATH/CodeResources"
           rm -rf "$APP_PATH/embedded.mobileprovision"
-          
-          # 3. 创建并配置正确的 Info.plist
+
           echo "创建正确的 Info.plist..."
-          cat > "$APP_PATH/Info.plist" << 'INFO_PLIST_EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>zh-Hans</string>
-	<key>CFBundleDisplayName</key>
-	<string>TvBoxFlutter</string>
-	<key>CFBundleExecutable</key>
-	<string>Runner</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.example.tvboxFlutter</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>TvBoxFlutter</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.4.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>MinimumOSVersion</key>
-	<string>14.0</string>
-	<key>UIDeviceFamily</key>
-	<array>
-		<integer>1</integer>
-		<integer>2</integer>
-	</array>
-	<key>UIRequiredDeviceCapabilities</key>
-	<array>
-		<string>arm64</string>
-	</array>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-</dict>
-</plist>
-INFO_PLIST_EOF
-          
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleDevelopmentRegion" "$APP_PATH/Info.plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string zh-Hans" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName TvBoxFlutter" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Runner" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.example.tvboxFlutter" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName TvBoxFlutter" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.4.0" "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1" "$APP_PATH/Info.plist"
+
           echo "=== 验证最终 Info.plist ==="
           plutil -lint "$APP_PATH/Info.plist"
           if [ $? -ne 0 ]; then
             echo "❌ Info.plist 验证失败！"
-            cat "$APP_PATH/Info.plist"
             exit 1
           fi
-          
+
           echo "✅ Info.plist 验证成功"
           echo "Bundle ID: $(/usr/libexec/PlistBuddy -c "Get :CFBundleIdentifier" "$APP_PATH/Info.plist")"
           echo "Display Name: $(/usr/libexec/PlistBuddy -c "Get :CFBundleDisplayName" "$APP_PATH/Info.plist")"
-          
-          # 4. 检查 .app 目录结构
+
           echo -e "\n=== 最终 .app 结构 ==="
           ls -la "$APP_PATH"
 
       - name: Build TrollStore IPA
         run: |
           APP_PATH="./build/Release-iphoneos/Runner.app"
-          
+
           echo "=== 构建 TrollStore IPA ==="
           mkdir -p ./Build
           TEMP_DIR=$(mktemp -d)
           mkdir -p "$TEMP_DIR/Payload"
           cp -r "$APP_PATH" "$TEMP_DIR/Payload/"
           cd "$TEMP_DIR"
-          
-          # 使用最佳的 zip 选项（不包含额外属性）
+
           zip -r -q -X "$GITHUB_WORKSPACE/Build/tvbox-Flutter-TrollStore.ipa" Payload
           cd "$GITHUB_WORKSPACE"
           rm -rf "$TEMP_DIR"
-          
+
           if [ ! -f "./Build/tvbox-Flutter-TrollStore.ipa" ]; then
             echo "❌ IPA 构建失败！"
             exit 1
           fi
-          
+
           echo "✅ IPA 已成功生成: ./Build/tvbox-Flutter-TrollStore.ipa"
           echo "IPA 大小: $(du -sh ./Build/tvbox-Flutter-TrollStore.ipa | cut -f1)"
           echo -e "\n=== IPA 内容 ==="
