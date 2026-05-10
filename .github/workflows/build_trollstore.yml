@@ -23,6 +23,7 @@ jobs:
 
       - name: Download and Setup NodeMobile.xcframework
         run: |
+          set -e
           echo "=== Downloading NodeMobile.xcframework ==="
           mkdir -p ios/Frameworks
           cd ios/Frameworks
@@ -40,18 +41,40 @@ jobs:
           
           echo "✅ NodeMobile.xcframework downloaded"
           
-          echo "=== Fixing Info.plist if needed ==="
           FRAMEWORK_PATH="ios/Frameworks/NodeMobile.xcframework"
           
-          plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1
-          if [ $? -ne 0 ]; then
-            echo "Regenerating Info.plist..."
-            PLIST='<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>AvailableLibraries</key><array><dict><key>BinaryPath</key><string>NodeMobile.framework/NodeMobile</string><key>LibraryIdentifier</key><string>ios-arm64</string><key>LibraryPath</key><string>NodeMobile.framework</string><key>SupportedArchitectures</key><array><string>arm64</string></array><key>SupportedPlatform</key><string>ios</string></dict></array><key>CFBundlePackageType</key><string>XFWK</string><key>XCFrameworkFormatVersion</key><string>1.0</string></dict></plist>'
-            echo "$PLIST" > "$FRAMEWORK_PATH/Info.plist"
-            plutil -lint "$FRAMEWORK_PATH/Info.plist"
-            echo "✅ Info.plist fixed"
+          if [ -f "$FRAMEWORK_PATH/Info.plist" ]; then
+            echo "Checking Info.plist..."
+            if plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1; then
+              echo "✅ Info.plist is valid"
+            else
+              echo "⚠️ Info.plist is invalid, creating new one..."
+              python3 << 'PYEOF'
+import plistlib
+plist = {
+    'AvailableLibraries': [{
+        'BinaryPath': 'NodeMobile.framework/NodeMobile',
+        'LibraryIdentifier': 'ios-arm64',
+        'LibraryPath': 'NodeMobile.framework',
+        'SupportedArchitectures': ['arm64'],
+        'SupportedPlatform': 'ios'
+    }],
+    'CFBundlePackageType': 'XFWK',
+    'XCFrameworkFormatVersion': '1.0'
+}
+with open('ios/Frameworks/NodeMobile.xcframework/Info.plist', 'wb') as f:
+    plistlib.dump(plist, f)
+PYEOF
+              if plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1; then
+                echo "✅ Info.plist created successfully"
+              else
+                echo "❌ Failed to create Info.plist"
+                exit 1
+              fi
+            fi
           else
-            echo "✅ Info.plist is valid"
+            echo "❌ Info.plist not found"
+            exit 1
           fi
 
       - name: Clean Flutter Build
