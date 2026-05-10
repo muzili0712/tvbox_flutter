@@ -147,60 +147,71 @@ jobs:
           pod install --repo-update
           cd ..
 
-      - name: Build TVBox with xcodebuild
+      - name: Build Flutter iOS App
         run: |
-          echo "=== 直接使用 xcodebuild 构建 ==="
-
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -sdk iphoneos \
-            -arch arm64 \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO \
-            BUILD_DIR="../build" \
-            CONFIGURATION_BUILD_DIR="../build/Release-iphoneos" \
-            -quiet \
-            clean build > ../ios/xcodebuild.log 2>&1
+          echo "=== 使用 Flutter 构建 iOS 应用 ==="
+          flutter build ios --release --no-codesign --no-tree-shake-icons > ios/build.log 2>&1
 
           BUILD_EXIT_CODE=$?
-          cd ..
 
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
-            echo "❌ xcodebuild failed with exit code: $BUILD_EXIT_CODE"
-            echo "=== xcodebuild 错误日志 (最后100行) ==="
-            tail -n 100 ios/xcodebuild.log
+            echo "❌ Flutter build failed with exit code: $BUILD_EXIT_CODE"
+            echo "=== Flutter build 错误日志 (最后100行) ==="
+            tail -n 100 ios/build.log
             exit 1
           else
-            echo "✅ xcodebuild 构建成功"
-            echo "=== 构建产物路径 ==="
-            tail -n 20 ios/xcodebuild.log | grep -E "CompileSwift|Linking|Build|SUCCEEDED"
+            echo "✅ Flutter build 成功"
           fi
 
-      - name: Verify .app Bundle
+      - name: Verify .app Bundle Location
         run: |
-          APP_PATH="./build/Release-iphoneos/Runner.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "❌ 构建失败：未找到 Runner.app"
-            echo "查找构建产物..."
-            ls -la build/
-            ls -la build/ios/ 2>/dev/null || true
-            ls -la build/Release-iphoneos/ 2>/dev/null || true
+          echo "=== 查找 .app bundle ==="
+
+          # Flutter 默认输出到 build/ios/iphoneos/
+          APP_PATHS=(
+            "./build/ios/iphoneos/Runner.app"
+            "./build/ios/Release-iphoneos/Runner.app"
+            "./build/ios/iphonesimulator/Runner.app"
+          )
+
+          APP_PATH=""
+          for path in "${APP_PATHS[@]}"; do
+            if [ -d "$path" ]; then
+              APP_PATH="$path"
+              echo "✅ 找到 .app bundle: $APP_PATH"
+              break
+            fi
+          done
+
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ 未找到 Runner.app"
+            echo "查找所有 .app 文件..."
+            find ./build -name "*.app" -type d 2>/dev/null | head -10
             exit 1
           fi
 
-          echo "✅ 找到 .app bundle，大小: $(du -sh "$APP_PATH" | cut -f1)"
+          echo "App 大小: $(du -sh "$APP_PATH" | cut -f1)"
           ls -la "$APP_PATH"
 
       - name: Clean and Fix App Bundle
         run: |
-          APP_PATH="./build/Release-iphoneos/Runner.app"
+          APP_PATH="./build/ios/iphoneos/Runner.app"
+
+          if [ ! -d "$APP_PATH" ]; then
+            APP_PATH="./build/ios/Release-iphoneos/Runner.app"
+          fi
+
+          if [ ! -d "$APP_PATH" ]; then
+            APP_PATH=$(find ./build -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "❌ 无法找到 .app bundle"
+            exit 1
+          fi
 
           echo "=== 清理并修复 .app bundle ==="
+          echo "使用 bundle: $APP_PATH"
 
           chmod +x "$APP_PATH/Runner"
 
@@ -209,15 +220,11 @@ jobs:
           rm -rf "$APP_PATH/CodeResources"
           rm -rf "$APP_PATH/embedded.mobileprovision"
 
-          echo "创建正确的 Info.plist..."
-          /usr/libexec/PlistBuddy -c "Delete :CFBundleDevelopmentRegion" "$APP_PATH/Info.plist" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string zh-Hans" "$APP_PATH/Info.plist"
+          echo "修复 Info.plist..."
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName TvBoxFlutter" "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Runner" "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.example.tvboxFlutter" "$APP_PATH/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleName TvBoxFlutter" "$APP_PATH/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.4.0" "$APP_PATH/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1" "$APP_PATH/Info.plist"
 
           echo "=== 验证最终 Info.plist ==="
           plutil -lint "$APP_PATH/Info.plist"
@@ -233,11 +240,20 @@ jobs:
           echo -e "\n=== 最终 .app 结构 ==="
           ls -la "$APP_PATH"
 
+          # 保存最终路径供下一步使用
+          echo "$APP_PATH" > /tmp/app_path.txt
+
       - name: Build TrollStore IPA
         run: |
-          APP_PATH="./build/Release-iphoneos/Runner.app"
+          APP_PATH=$(cat /tmp/app_path.txt)
+
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "❌ 无法读取 .app bundle 路径"
+            exit 1
+          fi
 
           echo "=== 构建 TrollStore IPA ==="
+          echo "使用 bundle: $APP_PATH"
           mkdir -p ./Build
           TEMP_DIR=$(mktemp -d)
           mkdir -p "$TEMP_DIR/Payload"
@@ -272,6 +288,7 @@ jobs:
         with:
           name: build-logs
           path: |
+            ./ios/build.log
             ./ios/xcodebuild.log
             ./build/ios/*.log
           retention-days: 7
