@@ -49,22 +49,7 @@ jobs:
               echo "✅ Info.plist is valid"
             else
               echo "⚠️ Info.plist is invalid, creating new one..."
-              python3 << 'PYEOF'
-import plistlib
-plist = {
-    'AvailableLibraries': [{
-        'BinaryPath': 'NodeMobile.framework/NodeMobile',
-        'LibraryIdentifier': 'ios-arm64',
-        'LibraryPath': 'NodeMobile.framework',
-        'SupportedArchitectures': ['arm64'],
-        'SupportedPlatform': 'ios'
-    }],
-    'CFBundlePackageType': 'XFWK',
-    'XCFrameworkFormatVersion': '1.0'
-}
-with open('ios/Frameworks/NodeMobile.xcframework/Info.plist', 'wb') as f:
-    plistlib.dump(plist, f)
-PYEOF
+              python3 -c "import plistlib; plistlib.dump({'AvailableLibraries': [{'BinaryPath': 'NodeMobile.framework/NodeMobile', 'LibraryIdentifier': 'ios-arm64', 'LibraryPath': 'NodeMobile.framework', 'SupportedArchitectures': ['arm64'], 'SupportedPlatform': 'ios'}], 'CFBundlePackageType': 'XFWK', 'XCFrameworkFormatVersion': '1.0'}, open('ios/Frameworks/NodeMobile.xcframework/Info.plist', 'wb'))"
               if plutil -lint "$FRAMEWORK_PATH/Info.plist" > /dev/null 2>&1; then
                 echo "✅ Info.plist created successfully"
               else
