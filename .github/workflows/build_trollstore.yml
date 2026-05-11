@@ -88,7 +88,7 @@ jobs:
           PYEOF
 
           cd ..
-          flutter build ios --release --no-codesign --no-tree-shake-icons --no-pub --skip-pods
+          flutter build ios --release --no-codesign --no-tree-shake-icons
 
       - name: Copy Node.js files to App Bundle
         run: |
