@@ -6,24 +6,30 @@ import UIKit
     private var nodeJSChannel: FlutterMethodChannel?
     private var eventChannel: FlutterEventChannel?
     fileprivate var eventSink: FlutterEventSink?
+    fileprivate var managementPort: Int = 0
+    fileprivate var spiderPort: Int = 0
 
     override func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         let controller = window?.rootViewController as? FlutterViewController
-        
+
         setupNodeJSChannel(with: controller)
         setupEventChannel(with: controller)
-        
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNodePortNotification(_:)),
+            name: NSNotification.Name("NodeServerPortReceived"),
+            object: nil
+        )
+
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
 
     private func setupNodeJSChannel(with controller: FlutterViewController?) {
-        guard let controller = controller else {
-            print("Cannot get FlutterViewController")
-            return
-        }
+        guard let controller = controller else { return }
 
         nodeJSChannel = FlutterMethodChannel(
             name: "com.tvbox/nodejs",
@@ -31,6 +37,7 @@ import UIKit
         )
 
         nodeJSChannel?.setMethodCallHandler { [weak self] (call, result) in
+            guard let self = self else { return }
             switch call.method {
             case "startNodeJS":
                 NodeJSManager.shared().startNodeJS { success in
@@ -38,12 +45,39 @@ import UIKit
                 }
 
             case "getNativeServerPort":
-                let port = NodeJSManager.shared().getNativeServerPort()
-                result(port)
+                result(NodeJSManager.shared().getNativeServerPort())
+
+            case "getManagementPort":
+                result(NodeJSManager.shared().getManagementPort())
+
+            case "getSpiderPort":
+                result(NodeJSManager.shared().getSpiderPort())
 
             case "stopNodeJS":
                 NodeJSManager.shared().stopNodeJS()
                 result(nil)
+
+            case "loadSourceFromURL":
+                guard let args = call.arguments as? [String: Any],
+                      let url = args["url"] as? String else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "url is required", details: nil))
+                    return
+                }
+                NodeJSManager.shared().loadSource(fromURL: url) { success, message in
+                    if success {
+                        result(["success": true, "message": message ?? ""])
+                    } else {
+                        result(FlutterError(code: "LOAD_FAILED", message: message ?? "Unknown error", details: nil))
+                    }
+                }
+
+            case "deleteSource":
+                NodeJSManager.shared().deleteSource(completion: { success in
+                    result(success)
+                })
+
+            case "getSourcePath":
+                result(NodeJSManager.shared().getDocumentsSourcePath())
 
             default:
                 result(FlutterMethodNotImplemented)
@@ -52,10 +86,7 @@ import UIKit
     }
 
     private func setupEventChannel(with controller: FlutterViewController?) {
-        guard let controller = controller else {
-            print("Cannot get FlutterViewController for event channel")
-            return
-        }
+        guard let controller = controller else { return }
 
         eventChannel = FlutterEventChannel(
             name: "com.tvbox/nodejs/events",
@@ -66,8 +97,22 @@ import UIKit
         NodeEventStreamHandler.shared.setAppDelegate(self)
     }
 
-    func onNodePortReceived(_ port: Int) {
-        eventSink?(port)
+    @objc private func handleNodePortNotification(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let port = userInfo["port"] as? Int,
+              let type = userInfo["type"] as? String else { return }
+
+        if type == "management" {
+            managementPort = port
+        } else if type == "spider" {
+            spiderPort = port
+        }
+
+        let eventData: [String: Any] = ["port": port, "type": type]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: eventData),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            eventSink?(jsonString)
+        }
     }
 }
 
@@ -77,12 +122,6 @@ class NodeEventStreamHandler: NSObject, FlutterStreamHandler {
 
     func setAppDelegate(_ delegate: AppDelegate) {
         self.appDelegate = delegate
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleNodePortNotification(_:)),
-            name: NSNotification.Name("NodeServerPortReceived"),
-            object: nil
-        )
     }
 
     func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
@@ -93,11 +132,5 @@ class NodeEventStreamHandler: NSObject, FlutterStreamHandler {
     func onCancel(withArguments arguments: Any?) -> FlutterError? {
         appDelegate?.eventSink = nil
         return nil
-    }
-
-    @objc private func handleNodePortNotification(_ notification: Notification) {
-        if let port = notification.userInfo?["port"] as? Int {
-            appDelegate?.onNodePortReceived(port)
-        }
     }
 }

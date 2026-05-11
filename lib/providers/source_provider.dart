@@ -10,14 +10,13 @@ class SourceProvider extends ChangeNotifier {
   SourceConfig? _currentSource;
   List<dynamic> _categories = [];
   bool _isLoading = false;
-
-  Map<String, dynamic>? _catConfig;
+  String? _errorMessage;
 
   List<SourceConfig> get sources => _sources;
   SourceConfig? get currentSource => _currentSource;
   List<dynamic> get categories => _categories;
   bool get isLoading => _isLoading;
-  Map<String, dynamic>? get catConfig => _catConfig;
+  String? get errorMessage => _errorMessage;
 
   SourceProvider() {
     _loadSources();
@@ -33,13 +32,14 @@ class SourceProvider extends ChangeNotifier {
 
     final currentSourceId = prefs.getString(AppConstants.keyCurrentSource);
     if (currentSourceId != null) {
-      _currentSource = _sources.firstWhere(
-        (s) => s.id == currentSourceId,
-        orElse: () =>
-            _sources.isNotEmpty ? _sources.first : SourceConfig.empty(),
-      );
-      if (_currentSource!.id.isEmpty && _sources.isNotEmpty) {
-        _currentSource = _sources.first;
+      try {
+        _currentSource = _sources.firstWhere(
+          (s) => s.id == currentSourceId,
+        );
+      } catch (e) {
+        if (_sources.isNotEmpty) {
+          _currentSource = _sources.first;
+        }
       }
     } else if (_sources.isNotEmpty) {
       _currentSource = _sources.first;
@@ -48,17 +48,56 @@ class SourceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addSource(SourceConfig source) async {
-    _sources.add(source);
-    await _saveSources();
-
-    if (_currentSource == null) {
-      _currentSource = source;
-      await _saveCurrentSource();
-      await _activateSource(source);
+  Future<bool> addSource(SourceConfig source) async {
+    if (source.name.trim().isEmpty) {
+      _errorMessage = 'Source name cannot be empty';
+      notifyListeners();
+      return false;
     }
 
+    if (source.sourceType == 'remote' && source.url.trim().isEmpty) {
+      _errorMessage = 'Source URL cannot be empty';
+      notifyListeners();
+      return false;
+    }
+
+    _errorMessage = null;
+    _isLoading = true;
     notifyListeners();
+
+    try {
+      final nodejs = NodeJSService.instance;
+
+      if (source.sourceType == 'remote') {
+        final success = await nodejs.loadSourceFromURL(source.url);
+        if (!success) {
+          _errorMessage = 'Failed to load remote source';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+      }
+
+      _sources.add(source);
+      await _saveSources();
+
+      _currentSource = source;
+      await _saveCurrentSource();
+
+      if (nodejs.hasSpiderServer) {
+        await loadCatConfig();
+        await loadHomeContent();
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to add source: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = false;
+    notifyListeners();
+    return true;
   }
 
   Future<void> removeSource(String id) async {
@@ -66,8 +105,16 @@ class SourceProvider extends ChangeNotifier {
     await _saveSources();
 
     if (_currentSource?.id == id) {
-      _currentSource = _sources.isNotEmpty ? _sources.first : null;
-      await _saveCurrentSource();
+      if (_sources.isNotEmpty) {
+        _currentSource = _sources.first;
+        await _saveCurrentSource();
+        await loadHomeContent();
+      } else {
+        _currentSource = null;
+        await _saveCurrentSource();
+        _categories = [];
+        await NodeJSService.instance.deleteSource();
+      }
     }
 
     notifyListeners();
@@ -76,30 +123,8 @@ class SourceProvider extends ChangeNotifier {
   Future<void> setCurrentSource(SourceConfig source) async {
     _currentSource = source;
     await _saveCurrentSource();
-    await _activateSource(source);
+    await loadHomeContent();
     notifyListeners();
-  }
-
-  Future<void> _activateSource(SourceConfig source) async {
-    final nodejs = NodeJSService.instance;
-
-    if (source.sourceType == 'remote') {
-      try {
-        await nodejs.loadRemoteSource(source.url);
-      } catch (e) {
-        print('Failed to load remote source: $e');
-      }
-    } else if (source.sourceType == 'local') {
-      try {
-        await nodejs.loadLocalSource(source.url);
-      } catch (e) {
-        print('Failed to load local source: $e');
-      }
-    }
-
-    if (source.spiderKey != null && source.spiderType != null) {
-      nodejs.setCurrentSpider(source.spiderKey!, source.spiderType!);
-    }
   }
 
   Future<void> _saveSources() async {
@@ -120,16 +145,27 @@ class SourceProvider extends ChangeNotifier {
   Future<void> loadHomeContent() async {
     if (_currentSource == null) return;
 
+    final nodejs = NodeJSService.instance;
+    if (!nodejs.hasSpiderServer) return;
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      await _activateSource(_currentSource!);
+      final result = await nodejs.getCatConfig();
 
-      final nodejs = NodeJSService.instance;
-      final result = await nodejs.getHomeContent();
+      final videoSites =
+          result['video']?['sites'] as List<dynamic>? ?? [];
+      if (videoSites.isNotEmpty) {
+        final firstSite = videoSites.first as Map<String, dynamic>;
+        final key =
+            (firstSite['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
+        final type = firstSite['type'] as int? ?? 3;
+        nodejs.setCurrentSpider(key, type);
+      }
 
-      final classData = result['class'];
+      final homeResult = await nodejs.getHomeContent();
+      final classData = homeResult['class'];
       if (classData is List) {
         _categories = classData;
       } else {
@@ -146,37 +182,59 @@ class SourceProvider extends ChangeNotifier {
 
   Future<void> loadCatConfig() async {
     try {
-      _catConfig = await NodeJSService.instance.getCatConfig();
+      final nodejs = NodeJSService.instance;
+      if (!nodejs.hasSpiderServer) return;
 
-      if (_catConfig != null && _catConfig!['video'] != null) {
-        final videoSites =
-            _catConfig!['video']['sites'] as List<dynamic>? ?? [];
+      final config = await nodejs.getCatConfig();
+      if (config.isEmpty) return;
 
-        for (final site in videoSites) {
-          final key = site['key'] as String?;
-          final name = site['name'] as String?;
-          final type = site['type'] as int?;
+      final videoSites =
+          config['video']?['sites'] as List<dynamic>? ?? [];
+      for (final site in videoSites) {
+        final key =
+            (site['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
+        final name = site['name'] as String? ?? '';
+        final type = site['type'] as int? ?? 3;
 
-          if (key != null && name != null) {
-            final exists = _sources.any((s) => s.spiderKey == key);
-            if (!exists) {
-              final source = SourceConfig.catPawOpen(
-                id: 'catpaw_$key',
-                name: name,
-                spiderKey: key,
-                spiderType: type ?? 3,
-              );
-              _sources.add(source);
-            }
+        if (key.isNotEmpty && name.isNotEmpty) {
+          final exists = _sources.any((s) => s.spiderKey == key);
+          if (!exists) {
+            final source = SourceConfig.catPawOpen(
+              id: 'catpaw_$key',
+              name: name,
+              spiderKey: key,
+              spiderType: type,
+            );
+            _sources.add(source);
           }
         }
-
-        await _saveSources();
       }
 
+      await _saveSources();
       notifyListeners();
     } catch (e) {
       print('Failed to load cat config: $e');
+    }
+  }
+
+  Future<void> activateCurrentSource() async {
+    if (_currentSource == null) return;
+    final nodejs = NodeJSService.instance;
+
+    if (_currentSource!.sourceType == 'remote' && !nodejs.hasSpiderServer) {
+      _isLoading = true;
+      notifyListeners();
+
+      final success = await nodejs.loadSourceFromURL(_currentSource!.url);
+      if (success) {
+        await loadCatConfig();
+        await loadHomeContent();
+      }
+
+      _isLoading = false;
+      notifyListeners();
+    } else if (nodejs.hasSpiderServer) {
+      await loadHomeContent();
     }
   }
 }

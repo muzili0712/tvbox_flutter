@@ -204,22 +204,36 @@ class _HomeContentState extends State<HomeContent>
 
     final sourceProvider = Provider.of<SourceProvider>(context);
 
-    if (sourceProvider.categories.isEmpty) {
+    if (sourceProvider.sources.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('请先添加数据源'),
-            const SizedBox(height: 20),
+            const Icon(Icons.source_outlined, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text('请添加数据源', style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const SettingsPage()),
-                );
-              },
+              onPressed: () => Navigator.pushNamed(context, '/source_management'),
               child: const Text('添加数据源'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (sourceProvider.categories.isEmpty && !sourceProvider.isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.refresh, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text('内容未加载', style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => sourceProvider.activateCurrentSource(),
+              child: const Text('加载内容'),
             ),
           ],
         ),

@@ -26,9 +26,8 @@ node build-optimized.js || node build.js
 
 # 确保 dist/main.js 存在
 if [ -d "dist" ]; then
-    if [ -f "dist/index.js" ]; then
-        cp dist/index.js dist/main.js
-        echo "✅ main.js created"
+    if [ -f "dist/main.js" ]; then
+        echo "✅ main.js found"
     fi
 
     echo "✅ Node.js build completed"

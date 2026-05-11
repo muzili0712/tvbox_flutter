@@ -26,10 +26,8 @@ node build-optimized.js || node build.js
 
 # 复制构建结果到 dist
 if [ -d "dist" ]; then
-    # 创建 main.js 作为入口点（复制 index.js）
-    if [ -f "dist/index.js" ]; then
-        cp dist/index.js dist/main.js
-        echo "✅ main.js created"
+    if [ -f "dist/main.js" ]; then
+        echo "✅ main.js found"
     fi
 
     echo "✅ Node.js build completed"

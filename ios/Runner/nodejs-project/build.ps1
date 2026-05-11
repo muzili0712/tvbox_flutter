@@ -86,12 +86,12 @@ try {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host "`n📦 构建产物位于: dist/" -ForegroundColor Cyan
     Write-Host "`n构建产物:" -ForegroundColor White
-    Write-Host "   - index.js (主程序)" -ForegroundColor Gray
+    Write-Host "   - main.js (主程序)" -ForegroundColor Gray
     Write-Host "   - index.config.js (配置)" -ForegroundColor Gray
     Write-Host "   - *.md5 (校验文件)" -ForegroundColor Gray
 
     # 显示文件大小
-    $mainJs = Join-Path $distDir "index.js"
+    $mainJs = Join-Path $distDir "main.js"
     if (Test-Path $mainJs) {
         $size = (Get-Item $mainJs).Length / 1KB
         Write-Host "`n📊 主程序大小: $([math]::Round($size, 2)) KB" -ForegroundColor Cyan
