@@ -1,8 +1,8 @@
-import { createServer } from 'http';
+const http = require('http');
 
 globalThis.catServerFactory = (handle) => {
     let port = 0;
-    const server = createServer((req, res) => {
+    const server = http.createServer((req, res) => {
         handle(req, res);
     });
     server.on('listening', () => {
@@ -30,8 +30,7 @@ globalThis.catDartServerPort = () => {
 
 console.log('📡 Native port configured: ' + nativePort);
 
-import { start } from './index.js';
+const { start } = require('./index.js');
+const config = require('./index.config.js');
 
-import * as config from './index.config.js';
-
-start(config.default);
+start(config.default || config);

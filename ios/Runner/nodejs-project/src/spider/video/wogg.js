@@ -5,7 +5,7 @@ async function init(_inReq, _outResp) {
 }
 
 async function home(_inReq, _outResp) {
-    return { class: [{ type_id: '1', type_name: '漫画' }] };
+    return { class: [{ type_id: '1', type_name: '电影' }] };
 }
 
 async function category(inReq, _outResp) {
@@ -19,8 +19,10 @@ async function detail(inReq, _outResp) {
     const videos = [];
     for (const id of ids) {
         videos.push({
-            comic_id: id,
-            comic_name: id,
+            vod_id: id,
+            vod_name: id,
+            vod_play_from: 'wogg',
+            vod_play_url: id + '$' + id,
         });
     }
     return { list: videos };
@@ -28,7 +30,7 @@ async function detail(inReq, _outResp) {
 
 async function play(inReq, _outResp) {
     const id = inReq.body.id;
-    return { urls: [id] };
+    return { parse: 0, url: id };
 }
 
 async function search(_inReq, _outResp) {
@@ -36,7 +38,7 @@ async function search(_inReq, _outResp) {
 }
 
 module.exports = {
-    meta: { key: 'copymanga', name: '拷贝漫画', type: 23 },
+    meta: { key: 'wogg', name: '玩偶哥哥', type: 3 },
     api: async (fastify) => {
         fastify.post('/init', init);
         fastify.post('/home', home);

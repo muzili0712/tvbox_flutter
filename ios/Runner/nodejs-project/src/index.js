@@ -1,24 +1,25 @@
-import fastify from 'fastify';
-import router from './router.js';
-import { JsonDB, Config } from 'node-json-db';
-import axios from 'axios';
+const fastify = require('fastify');
+const router = require('./router.js');
+const { JsonDB, Config } = require('node-json-db');
+const axios = require('axios');
 
 let server = null;
 
-export async function start(config) {
+async function start(config) {
     server = fastify({
-        serverFactory: catServerFactory,
+        serverFactory: globalThis.catServerFactory,
         forceCloseConnections: true,
         logger: !!(process.env.NODE_ENV !== 'development'),
         maxParamLength: 10240,
     });
+
     server.messageToDart = async (data, inReq) => {
         try {
             if (!data.prefix) {
                 data.prefix = inReq ? inReq.server.prefix : '';
             }
             console.log(data);
-            const port = catDartServerPort();
+            const port = globalThis.catDartServerPort();
             if (port == 0) {
                 return null;
             }
@@ -28,17 +29,20 @@ export async function start(config) {
             return null;
         }
     };
+
     server.address = function () {
         const result = this.server.address();
         result.url = `http://${result.address}:${result.port}`;
         result.dynamic = 'js2p://_WEB_';
         return result;
     };
+
     server.addHook('onError', async (_request, _reply, error) => {
         console.error(error);
         if (!error.statusCode) error.statusCode = 500;
         return error;
     });
+
     server.stop = false;
     server.config = config;
     server.db = new JsonDB(new Config((process.env['NODE_PATH'] || '.') + '/db.json', true, true, '/', true));
@@ -49,7 +53,7 @@ export async function start(config) {
     const address = server.server.address();
     console.log('🚀 Server listening on ' + address.port);
 
-    const nativePort = catDartServerPort();
+    const nativePort = globalThis.catDartServerPort();
     if (nativePort > 0) {
         try {
             await axios.get(`http://127.0.0.1:${nativePort}/onCatPawOpenPort?port=${address.port}`);
@@ -60,10 +64,15 @@ export async function start(config) {
     }
 }
 
-export async function stop() {
+async function stop() {
     if (server) {
         server.close();
         server.stop = true;
     }
     server = null;
 }
+
+module.exports = {
+    start,
+    stop,
+};
