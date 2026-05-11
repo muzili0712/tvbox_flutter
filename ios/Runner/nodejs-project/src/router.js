@@ -17,12 +17,13 @@ const spiderPrefix = '/spider';
 let defaultSpider = null;
 let defaultSpiderKey = null;
 let defaultSpiderType = null;
+let loadedConfig = null;
 
 async function router(fastify) {
     spiders.forEach((spider) => {
         const path = spiderPrefix + '/' + spider.meta.key + '/' + spider.meta.type;
         fastify.register(spider.api, { prefix: path });
-        console.log('Register spider: ' + path);
+        console.log('[Router] Register spider: ' + path);
     });
 
     fastify.post('/msg', async (request, reply) => {
@@ -31,8 +32,9 @@ async function router(fastify) {
             const action = body.action;
             const params = body.params || {};
 
-            console.log('[MSG] action:', action, 'params:', JSON.stringify(params));
+            console.log('[MSG] >>> action:', action, 'params:', JSON.stringify(params));
 
+            let result;
             switch (action) {
                 case 'setDefaultSpider':
                     const key = params.key;
@@ -40,75 +42,126 @@ async function router(fastify) {
                     defaultSpiderKey = key;
                     defaultSpiderType = type;
                     defaultSpider = spiders.find(s => s.meta.key === key && s.meta.type === type);
+                    console.log('[setDefaultSpider] key:', key, 'type:', type, 'found:', !!defaultSpider);
+                    if (defaultSpider) {
+                        console.log('[setDefaultSpider] meta:', JSON.stringify(defaultSpider.meta));
+                    }
                     return { success: true };
 
                 case 'getConfig':
-                    return buildConfig(fastify);
+                    result = buildConfig(fastify);
+                    console.log('[getConfig] returning config with', result.video.sites.length, 'video sites');
+                    return result;
 
                 case 'loadSource':
                     const url = params.url;
+                    console.log('[loadSource] url:', url);
                     if (url) {
                         try {
                             const resp = await fetch(url);
                             const text = await resp.text();
-                            console.log('[loadSource] loaded:', url);
-                            return { success: true, url: url };
+                            console.log('[loadSource] fetched', text.length, 'chars');
+                            try {
+                                loadedConfig = JSON.parse(text);
+                                console.log('[loadSource] parsed config, name:', loadedConfig.name || loadedConfig.apiName || 'unknown');
+                            } catch (e) {
+                                console.log('[loadSource] parse error:', e.message);
+                            }
+                            return { success: true, url: url, config: loadedConfig };
                         } catch (e) {
+                            console.log('[loadSource] fetch error:', e.message);
                             return { success: false, error: e.message };
                         }
                     }
                     return { success: false, error: 'no url' };
 
                 case 'getHomeContent':
+                    console.log('[getHomeContent] defaultSpider:', !!defaultSpider, 'key:', defaultSpiderKey);
                     if (defaultSpider) {
-                        const result = await defaultSpider.home(params, {});
-                        return result;
+                        try {
+                            result = await defaultSpider.home({}, {});
+                            console.log('[getHomeContent] result type:', typeof result, 'keys:', result ? Object.keys(result) : 'null');
+                            if (result && result.class) {
+                                console.log('[getHomeContent] classes:', JSON.stringify(result.class).substring(0, 200));
+                            }
+                            return result;
+                        } catch (e) {
+                            console.log('[getHomeContent] spider error:', e.message);
+                            return { class: [], error: e.message };
+                        }
                     }
-                    return buildConfig(fastify);
+                    result = buildConfig(fastify);
+                    console.log('[getHomeContent] no default spider, returning config with', result.video.sites.length, 'sites');
+                    return result;
 
                 case 'getCategoryContent':
+                    console.log('[getCategoryContent] defaultSpider:', !!defaultSpider);
                     if (defaultSpider) {
-                        const result = await defaultSpider.category({ body: params }, {});
-                        return result;
+                        try {
+                            result = await defaultSpider.category({ body: params }, {});
+                            return result;
+                        } catch (e) {
+                            console.log('[getCategoryContent] spider error:', e.message);
+                            return { list: [], page: 1, pagecount: 1, total: 0, error: e.message };
+                        }
                     }
                     return { list: [], page: 1, pagecount: 1, total: 0 };
 
                 case 'getVideoDetail':
                     if (defaultSpider) {
-                        const result = await defaultSpider.detail({ body: params }, {});
-                        return result;
+                        try {
+                            result = await defaultSpider.detail({ body: params }, {});
+                            return result;
+                        } catch (e) {
+                            console.log('[getVideoDetail] spider error:', e.message);
+                            return { list: [], error: e.message };
+                        }
                     }
                     return { list: [] };
 
                 case 'getPlayUrl':
                     if (defaultSpider) {
-                        const result = await defaultSpider.play({ body: params }, {});
-                        return result;
+                        try {
+                            result = await defaultSpider.play({ body: params }, {});
+                            return result;
+                        } catch (e) {
+                            console.log('[getPlayUrl] spider error:', e.message);
+                            return { parse: 0, url: '', error: e.message };
+                        }
                     }
                     return { parse: 0, url: '' };
 
                 case 'search':
+                    console.log('[search] defaultSpider:', !!defaultSpider, 'params:', JSON.stringify(params));
                     if (defaultSpider) {
-                        const result = await defaultSpider.search({ body: params }, {});
-                        return result;
+                        try {
+                            result = await defaultSpider.search({ body: params }, {});
+                            console.log('[search] result:', JSON.stringify(result).substring(0, 200));
+                            return result;
+                        } catch (e) {
+                            console.log('[search] spider error:', e.message);
+                            return { list: [], error: e.message };
+                        }
                     }
                     return { list: [] };
 
                 default:
                     console.log('[MSG] unknown action:', action);
-                    return { error: 'unknown action' };
+                    return { error: 'unknown action: ' + action };
             }
         } catch (error) {
             console.error('[MSG] error:', error);
-            return { error: error.message };
+            return { error: error.message, stack: error.stack };
         }
     });
 
     fastify.get('/check', async function (_request, reply) {
-        reply.send({ run: !fastify.stop });
+        console.log('[check] called');
+        reply.send({ run: !fastify.stop, defaultSpider: defaultSpiderKey });
     });
 
     fastify.get('/config', async function (_request, reply) {
+        console.log('[config] called');
         reply.send(buildConfig(fastify));
     });
 }
