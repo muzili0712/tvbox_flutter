@@ -24,12 +24,11 @@ class _WebConfigPageState extends State<WebConfigPage> {
 
   void _loadConfigPage() {
     _configUrl = NodeJSService.instance.getWebsiteUrl();
-    
+
     if (_configUrl.isEmpty) {
-      Fluttertoast.showToast(
-        msg: 'Node.js 服务未启动，请稍后重试',
-        toastLength: Toast.LENGTH_LONG,
-      );
+      setState(() {
+        _isLoading = false;
+      });
       return;
     }
 
@@ -70,6 +69,36 @@ class _WebConfigPageState extends State<WebConfigPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_configUrl.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('CatPawOpen 配置'),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              const Text('源服务未启动', style: TextStyle(fontSize: 16, color: Colors.grey)),
+              const SizedBox(height: 8),
+              const Text('请先添加并加载数据源', style: TextStyle(fontSize: 14, color: Colors.grey)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                  });
+                  _loadConfigPage();
+                },
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('CatPawOpen 配置'),

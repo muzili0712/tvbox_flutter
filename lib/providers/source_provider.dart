@@ -69,7 +69,11 @@ class SourceProvider extends ChangeNotifier {
       final nodejs = NodeJSService.instance;
 
       if (source.sourceType == 'remote') {
-        final success = await nodejs.loadSourceFromURL(source.url);
+        String url = source.url.trim();
+        if (url.endsWith('.js.md5')) {
+          url = url.substring(0, url.length - 4);
+        }
+        final success = await nodejs.loadSourceFromURL(url);
         if (!success) {
           _errorMessage = 'Failed to load remote source';
           _isLoading = false;

@@ -11,6 +11,7 @@ import 'package:tvbox_flutter/ui/live/live_page.dart';
 import 'package:tvbox_flutter/ui/widgets/bottom_nav_bar.dart';
 import 'package:tvbox_flutter/ui/detail/detail_page.dart';
 import 'package:tvbox_flutter/ui/log/log_viewer_page.dart';
+import 'package:tvbox_flutter/ui/settings/source_management_page.dart';
 import 'package:tvbox_flutter/models/video_item.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -214,7 +215,12 @@ class _HomeContentState extends State<HomeContent>
             const Text('请添加数据源', style: TextStyle(fontSize: 16, color: Colors.grey)),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => Navigator.pushNamed(context, '/source_management'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SourceManagementPage()),
+                ).then((_) => _loadHomeData());
+              },
               child: const Text('添加数据源'),
             ),
           ],

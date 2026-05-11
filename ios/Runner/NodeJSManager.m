@@ -242,7 +242,7 @@
                 [configMd5Data writeToFile:configMd5Path atomically:YES];
             }
         } else {
-            NSString *defaultConfig = @"export default { color: [] };";
+            NSString *defaultConfig = @"module.exports = { color: [] };";
             [defaultConfig writeToFile:configJSPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
 

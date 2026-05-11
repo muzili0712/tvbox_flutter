@@ -32,17 +32,19 @@ globalThis.catServerFactory = (handle) => {
 globalThis.catDartServerPort = () => nativeServerPort;
 
 function loadScript(path) {
+    const indexJSPath = path + '/index.js';
+    const indexConfigJSPath = path + '/index.config.js';
+    delete require.cache[require.resolve(indexJSPath)];
+    try { delete require.cache[require.resolve(indexConfigJSPath)]; } catch(e) {}
+    sourceModule = require(indexJSPath);
+    let config = {};
     try {
-        const indexJSPath = path + '/index.js';
-        const indexConfigJSPath = path + '/index.config.js';
-        delete require.cache[require.resolve(indexJSPath)];
-        try { delete require.cache[require.resolve(indexConfigJSPath)]; } catch(e) {}
-        sourceModule = require(indexJSPath);
-        const config = require(indexConfigJSPath);
-        sourceModule.start(config.default || config);
+        const configModule = require(indexConfigJSPath);
+        config = configModule.default || configModule;
     } catch (e) {
-        console.log('loadScript error:', e);
+        console.log('Config load skipped:', e.message);
     }
+    sourceModule.start(config);
 }
 
 const managementServer = Fastify({ logger: false });
@@ -73,7 +75,11 @@ managementServer.post('/source/loadPath', async (request) => {
     }
     try {
         await sourceModule?.stop?.();
+        clearSpiders();
         loadScript(sourcePath);
+        if (spiders.length === 0 && sourceModule === null) {
+            return { error: 'Source loaded but no spiders registered' };
+        }
         return { success: true, message: 'Source loaded from path' };
     } catch (e) {
         return { error: e.message };

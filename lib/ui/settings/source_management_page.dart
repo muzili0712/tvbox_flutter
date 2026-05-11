@@ -66,7 +66,7 @@ class _SourceManagementPageState extends State<SourceManagementPage> {
                       if (v == null || v.trim().isEmpty) return '请输入源地址';
                       final uri = Uri.tryParse(v.trim());
                       if (uri == null || !uri.hasScheme) return '请输入有效的URL';
-                      if (!v.trim().endsWith('.js')) return '源地址应以.js结尾';
+                      if (!v.trim().endsWith('.js') && !v.trim().endsWith('.js.md5')) return '源地址应以.js结尾';
                       return null;
                     },
                     decoration: const InputDecoration(

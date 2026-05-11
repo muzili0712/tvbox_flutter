@@ -18,15 +18,21 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
   @override
   void initState() {
     super.initState();
-    _loadDrives();
+    _isLoading = false;
   }
 
   Future<void> _loadDrives() async {
     setState(() => _isLoading = true);
-    
-    await Provider.of<CloudDriveProvider>(context, listen: false).loadDrives();
-    
-    setState(() => _isLoading = false);
+
+    try {
+      await Provider.of<CloudDriveProvider>(context, listen: false).loadDrives();
+    } catch (e) {
+      print('Failed to load drives: $e');
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -51,6 +57,8 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
   }
 
   Widget _buildBody() {
+    final driveProvider = Provider.of<CloudDriveProvider>(context);
+
     if (_isLoading) {
       return const Center(
         child: SpinKitFadingCircle(
@@ -60,15 +68,15 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
       );
     }
 
-    final driveProvider = Provider.of<CloudDriveProvider>(context);
-    
     if (driveProvider.drives.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('还没有添加网盘'),
-            const SizedBox(height: 20),
+            const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text('还没有添加网盘', style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
                 Navigator.push(
