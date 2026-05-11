@@ -109,19 +109,7 @@ jobs:
           rm -rf "$APP_PATH/embedded.mobileprovision"
           rm -rf "$APP_PATH/CodeResources" 2>/dev/null || true
 
-          PLIST="$APP_PATH/Info.plist"
-
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.example.tvboxFlutter" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName TvBoxFlutter" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleName TvBoxFlutter" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.4.0" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1" "$PLIST"
-
-          if ! /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST" > /dev/null 2>&1; then
-            /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
-          fi
-
-          echo "✅ Info.plist configured"
+          echo "✅ Code signature removed"
 
           TEMP_DIR=$(mktemp -d)
           mkdir -p "$TEMP_DIR/Payload"
