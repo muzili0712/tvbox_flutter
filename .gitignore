@@ -33,6 +33,9 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Node.js build artifacts
+**/nodejs-project/dist/
+
 # Symbolication related
 app.*.symbols
 
