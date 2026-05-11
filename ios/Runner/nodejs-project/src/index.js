@@ -43,7 +43,21 @@ export async function start(config) {
     server.config = config;
     server.db = new JsonDB(new Config((process.env['NODE_PATH'] || '.') + '/db.json', true, true, '/', true));
     server.register(router);
-    server.listen({ port: process.env['DEV_HTTP_PORT'] || 0, host: '127.0.0.1' });
+
+    await server.listen({ port: process.env['DEV_HTTP_PORT'] || 0, host: '127.0.0.1' });
+
+    const address = server.server.address();
+    console.log('🚀 Server listening on ' + address.port);
+
+    const nativePort = catDartServerPort();
+    if (nativePort > 0) {
+        try {
+            await axios.get(`http://127.0.0.1:${nativePort}/onCatPawOpenPort?port=${address.port}`);
+            console.log('📡 Notified native port: ' + nativePort);
+        } catch (error) {
+            console.log('⚠️ Failed to notify native port: ' + error.message);
+        }
+    }
 }
 
 export async function stop() {
