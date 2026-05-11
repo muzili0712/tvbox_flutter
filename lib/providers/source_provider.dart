@@ -129,15 +129,9 @@ class SourceProvider extends ChangeNotifier {
       final nodejs = NodeJSService.instance;
       final result = await nodejs.getHomeContent();
 
-      if (result is Map<String, dynamic>) {
-        final classData = result['class'];
-        if (classData is List) {
-          _categories = classData;
-        } else {
-          _categories = [];
-        }
-      } else if (result is List) {
-        _categories = result;
+      final classData = result['class'];
+      if (classData is List) {
+        _categories = classData;
       } else {
         _categories = [];
       }

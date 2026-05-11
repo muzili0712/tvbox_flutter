@@ -225,6 +225,50 @@ class NodeJSService extends ChangeNotifier {
     return result['sources'] as List<dynamic>? ?? [];
   }
 
+  Future<String> getPlayUrlSimple(String playId) async {
+    final k = _currentSpiderKey;
+    final t = _currentSpiderType;
+    if (k == null || t == null) throw Exception('No spider selected');
+    final result = await _post(_spiderPath(k, t) + '/play', {'flag': '', 'id': playId});
+    return result['url']?.toString() ?? result['parse']?.toString() ?? '';
+  }
+
+  Future<String> getCloudDrivePlayUrl(String driveId, String fileId) async {
+    final k = _currentSpiderKey;
+    final t = _currentSpiderType;
+    if (k == null || t == null) throw Exception('No spider selected');
+    final result = await _post(_spiderPath(k, t) + '/play', {'flag': driveId, 'id': fileId});
+    return result['url']?.toString() ?? result['parse']?.toString() ?? '';
+  }
+
+  Future<String> getLivePlayUrl(String channelId) async {
+    final k = _currentSpiderKey;
+    final t = _currentSpiderType;
+    if (k == null || t == null) throw Exception('No spider selected');
+    final result = await _post(_spiderPath(k, t) + '/play', {'flag': 'live', 'id': channelId});
+    return result['url']?.toString() ?? result['parse']?.toString() ?? '';
+  }
+
+  Future<void> addCloudDrive(String type, Map<String, dynamic> config) async {
+    await _post('/cloud/add', {'type': type, 'config': config});
+  }
+
+  Future<List<Map<String, dynamic>>> listCloudDriveFiles(String driveId, String path) async {
+    final result = await _post('/cloud/files', {'driveId': driveId, 'path': path});
+    final list = result['files'] as List<dynamic>? ?? [];
+    return list.cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> getLiveChannels() async {
+    try {
+      final result = await _get('/live/channels');
+      final list = result['channels'] as List<dynamic>? ?? [];
+      return list.cast<Map<String, dynamic>>();
+    } catch (e) {
+      return [];
+    }
+  }
+
   String getWebsiteUrl() {
     if (_sourceServerPort == null || _sourceServerPort! <= 0) return '';
     return 'http://127.0.0.1:$_sourceServerPort/website';
