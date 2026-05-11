@@ -33,4 +33,4 @@ console.log('📡 Native port configured: ' + nativePort);
 const { start } = require('./index.js');
 const config = require('./index.config.js');
 
-start(config.default || config);
+start(config);

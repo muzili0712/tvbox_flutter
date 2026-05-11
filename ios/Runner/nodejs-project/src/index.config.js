@@ -1,4 +1,4 @@
-export default {
+module.exports = {
     ali: {
         token: 'token',
         token280: 'token280',
