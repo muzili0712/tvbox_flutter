@@ -69,8 +69,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     final episode = widget.videoDetail!.episodes[index];
     try {
       final result = await NodeJSService.instance.getPlayUrl(
+        videoId: '',
         flag: episode.sourceName ?? '',
-        id: episode.url,
+        playId: episode.url,
       );
       final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
       if (playUrl.isEmpty || !mounted) return;
@@ -104,8 +105,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     final episode = widget.videoDetail!.episodes[_currentEpisodeIndex];
     try {
       final result = await NodeJSService.instance.getPlayUrl(
+        videoId: '',
         flag: episode.sourceName ?? '',
-        id: episode.url,
+        playId: episode.url,
       );
       final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
       if (playUrl.isEmpty || !mounted) return;

@@ -43,15 +43,23 @@ class _LivePageState extends State<LivePage> {
     
     if (!mounted) return;
     
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => VideoPlayerPage(
-          playUrl: playUrl,
-          title: channel.name,
+    if (playUrl != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerPage(
+            playUrl: playUrl,
+            title: channel.name,
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法获取播放地址')),
+        );
+      }
+    }
   }
 
   @override

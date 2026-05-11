@@ -48,10 +48,12 @@ class CloudDriveProvider extends ChangeNotifier {
 
   Future<List<DriveFile>> listFiles(String driveId, String path) async {
     final filesJson = await NodeJSService.instance.listCloudDriveFiles(driveId, path);
-    return filesJson.map((json) => DriveFile.fromJson(json)).toList();
+    return (jsonDecode(filesJson) as List)
+        .map((json) => DriveFile.fromJson(json as Map<String, dynamic>))
+        .toList();
   }
 
-  Future<String> getPlayUrl(String driveId, String fileId) async {
+  Future<String?> getPlayUrl(String driveId, String fileId) async {
     return await NodeJSService.instance.getCloudDrivePlayUrl(driveId, fileId);
   }
 }

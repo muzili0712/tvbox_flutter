@@ -172,8 +172,9 @@ class _DetailPageState extends State<DetailPage> {
                   onPressed: () async {
                     final result =
                         await NodeJSService.instance.getPlayUrl(
+                      videoId: '',
                       flag: episode.sourceName ?? '',
-                      id: episode.url,
+                      playId: episode.url,
                     );
                     final playUrl = result['url']?.toString() ??
                         result['parse']?.toString() ??

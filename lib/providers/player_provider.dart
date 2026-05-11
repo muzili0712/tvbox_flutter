@@ -46,15 +46,15 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  Future<String> getPlayUrl(String playId) async {
+  Future<String?> getPlayUrl(String playId) async {
     return await NodeJSService.instance.getPlayUrlSimple(playId);
   }
   
-  Future<String> getCloudDrivePlayUrl(String driveId, String fileId) async {
+  Future<String?> getCloudDrivePlayUrl(String driveId, String fileId) async {
     return await NodeJSService.instance.getCloudDrivePlayUrl(driveId, fileId);
   }
   
-  Future<String> getLivePlayUrl(String channelId) async {
+  Future<String?> getLivePlayUrl(String channelId) async {
     return await NodeJSService.instance.getLivePlayUrl(channelId);
   }
 }
