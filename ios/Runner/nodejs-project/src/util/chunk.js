@@ -89,7 +89,6 @@ async function chunkStream(inReq, outResp, url, urlKey, headers, option) {
     let byteEnd = contentLength - 1;
     const streamHeader = {};
     if (inReq.headers.range) {
-        // console.log(inReq.id, inReq.headers.range);
         const ranges = inReq.headers.range.trim().split(/=|-/);
         if (ranges.length > 2 && ranges[2]) {
             byteEnd = parseInt(ranges[2]);

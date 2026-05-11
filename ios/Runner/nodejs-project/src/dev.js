@@ -1,8 +1,8 @@
-const http = require('http');
+import { createServer } from 'http';
 
 globalThis.catServerFactory = (handle) => {
     let port = 0;
-    const server = http.createServer((req, res) => {
+    const server = createServer((req, res) => {
         handle(req, res);
     });
     server.on('listening', () => {
@@ -15,22 +15,12 @@ globalThis.catServerFactory = (handle) => {
     return server;
 };
 
-let nativePort = 0;
-const args = process.argv;
-for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--native-port' && i + 1 < args.length) {
-        nativePort = parseInt(args[i + 1], 10);
-        break;
-    }
-}
-
 globalThis.catDartServerPort = () => {
-    return nativePort;
+    return 0;
 };
 
-console.log('📡 Native port configured: ' + nativePort);
+import { start } from './index.js';
 
-const { start } = require('./index.js');
-const config = require('./index.config.js');
+import * as config from './index.config.js';
 
-start(config);
+start(config.default);

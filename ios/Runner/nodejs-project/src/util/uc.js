@@ -20,7 +20,7 @@ export const conf = {
 }
 
 export function generateDeviceID(timestamp) {
-    return CryptoJS.MD5(timestamp).toString().slice(0, 16); // 取前16位
+    return CryptoJS.MD5(timestamp).toString().slice(0, 16);
 }
 
 export function generateReqId(deviceID, timestamp) {
@@ -130,7 +130,6 @@ async function clearSaveDir() {
 
 async function createSaveDir(clean) {
     if (saveDirId) {
-        // 删除所有子文件
         if (clean) await clearSaveDir();
         return;
     }
@@ -257,7 +256,6 @@ async function save(shareId, stoken, fileId, fileToken, clean) {
     });
     if (saveResult.data && saveResult.data.task_id) {
         let retry = 0;
-        // wait task finish
         while (true) {
             const taskResult = await api(`task?${pr}&task_id=${saveResult.data.task_id}&retry_index=${retry}`, {}, {}, 'get');
             if (taskResult.data && taskResult.data.save_as && taskResult.data.save_as.save_as_top_fids && taskResult.data.save_as.save_as_top_fids.length > 0) {
@@ -300,7 +298,7 @@ export async function getDownload(shareId, stoken, fileId, fileToken, clean) {
     if (token) {
         let video = []
         const pathname = '/file';
-        const timestamp = Math.floor(Date.now() / 1000).toString() + '000'; // 13位时间戳需调整
+        const timestamp = Math.floor(Date.now() / 1000).toString() + '000';
         const deviceID = Addition.DeviceID || generateDeviceID(timestamp);
         const reqId = generateReqId(deviceID, timestamp);
         const x_pan_token = generateXPanToken("GET", pathname, timestamp, conf.signKey);

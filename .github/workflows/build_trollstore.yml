@@ -52,11 +52,15 @@ jobs:
           fi
 
           node esbuild.js 2>&1
+          node esbuild-config.js 2>&1
 
-          if [ -d "dist" ] && [ -f "dist/index.js" ]; then
+          if [ -d "dist" ] && [ -f "dist/index.js" ] && [ -f "dist/index.config.js" ]; then
             echo "✅ Node.js build successful"
-            echo "   Output: dist/index.js"
+            echo "   Output: dist/index.js, dist/index.config.js"
             ls -la dist/
+          else
+            echo "❌ Build failed - missing output files"
+            exit 1
           fi
 
       - name: Build iOS App
@@ -88,6 +92,8 @@ jobs:
           mkdir -p "$APP_PATH/nodejs-project/dist"
           cp ios/Runner/nodejs-project/dist/index.js "$APP_PATH/nodejs-project/dist/"
           cp ios/Runner/nodejs-project/dist/index.js.md5 "$APP_PATH/nodejs-project/dist/" 2>/dev/null || true
+          cp ios/Runner/nodejs-project/dist/index.config.js "$APP_PATH/nodejs-project/dist/"
+          cp ios/Runner/nodejs-project/dist/index.config.js.md5 "$APP_PATH/nodejs-project/dist/" 2>/dev/null || true
 
           echo "✅ Node.js files copied to app bundle"
           ls -la "$APP_PATH/nodejs-project/dist/"

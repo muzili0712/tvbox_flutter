@@ -3,11 +3,12 @@ import fs from 'fs';
 import { createHash } from 'crypto';
 
 esbuild.build({
-    entryPoints: ['src/index.js'],
-    outfile: 'dist/index.js',
+    entryPoints: ['src/index.config.js'],
+    outfile: 'dist/index.config.js',
     bundle: true,
-    minify: true,
+    minify: false,
     write: true,
+    charset: 'utf8',
     format: 'cjs',
     platform: 'node',
     target: 'node18',
@@ -20,8 +21,8 @@ function genMd5() {
         name: 'gen-output-file-md5',
         setup(build) {
             build.onEnd(async (_) => {
-                const md5 = createHash('md5').update(fs.readFileSync('dist/index.js')).digest('hex');
-                fs.writeFileSync('dist/index.js.md5', md5);
+                const md5 = createHash('md5').update(fs.readFileSync('dist/index.config.js')).digest('hex');
+                fs.writeFileSync('dist/index.config.js.md5', md5);
             });
         },
     };

@@ -99,7 +99,6 @@ async function clearSaveDir() {
 
 async function createSaveDir(clean) {
     if (saveDirId) {
-        // 删除所有子文件
         if (clean) await clearSaveDir();
         return;
     }
@@ -226,7 +225,6 @@ async function save(shareId, stoken, fileId, fileToken, clean) {
     });
     if (saveResult.data && saveResult.data.task_id) {
         let retry = 0;
-        // wait task finish
         while (true) {
             const taskResult = await api(`task?${pr}&task_id=${saveResult.data.task_id}&retry_index=${retry}`, {}, {}, 'get');
             if (taskResult.data && taskResult.data.save_as && taskResult.data.save_as.save_as_top_fids && taskResult.data.save_as.save_as_top_fids.length > 0) {
