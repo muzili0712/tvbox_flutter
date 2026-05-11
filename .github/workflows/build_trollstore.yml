@@ -63,48 +63,6 @@ jobs:
             exit 1
           fi
 
-      - name: Configure Xcode Code Signing
-        run: |
-          set -e
-          echo "=== Configuring Xcode code signing for TrollStore build ==="
-
-          cd ios
-
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/' Runner.xcodeproj/project.pbxproj
-
-          /usr/libexec/PlistBuddy -c "Set :objects:97C147071CF9000F007C117D:buildSettings:DEVELOPMENT_TEAM 0000000000" Runner.xcodeproj/project.pbxproj 2>/dev/null || \
-          python3 -c "
-          import re, sys
-          with open('Runner.xcodeproj/project.pbxproj', 'r') as f:
-              content = f.read()
-          # Add DEVELOPMENT_TEAM to Release config (97C147071CF9000F007C117D)
-          content = re.sub(
-              r'(97C147071CF9000F007C117D /\* Release \*/ = \{.*?buildSettings = \{)',
-              r'\1\n\t\t\t\tDEVELOPMENT_TEAM = 0000000000;',
-              content,
-              flags=re.DOTALL
-          )
-          # Add DEVELOPMENT_TEAM to Profile config (249021D4217E4FDB00AE95B9)
-          content = re.sub(
-              r'(249021D4217E4FDB00AE95B9 /\* Profile \*/ = \{.*?buildSettings = \{)',
-              r'\1\n\t\t\t\tDEVELOPMENT_TEAM = 0000000000;',
-              content,
-              flags=re.DOTALL
-          )
-          # Add DEVELOPMENT_TEAM to Debug config (97C147061CF9000F007C117D)
-          content = re.sub(
-              r'(97C147061CF9000F007C117D /\* Debug \*/ = \{.*?buildSettings = \{)',
-              r'\1\n\t\t\t\tDEVELOPMENT_TEAM = 0000000000;',
-              content,
-              flags=re.DOTALL
-          )
-          with open('Runner.xcodeproj/project.pbxproj', 'w') as f:
-              f.write(content)
-          print('DEVELOPMENT_TEAM set to 0000000000')
-          "
-
-          echo "✅ Code signing configured for TrollStore build"
-
       - name: Build iOS App
         run: |
           set -e
@@ -115,8 +73,22 @@ jobs:
           cd ios
           pod install --repo-update
 
+          echo "=== Configuring code signing for TrollStore ==="
+          python3 << 'PYEOF'
+          with open('Runner.xcodeproj/project.pbxproj', 'r') as f:
+              content = f.read()
+          content = content.replace(
+              'PRODUCT_BUNDLE_IDENTIFIER = com.example.tvboxFlutter;',
+              'PRODUCT_BUNDLE_IDENTIFIER = com.example.tvboxFlutter;\n\t\t\t\tDEVELOPMENT_TEAM = 0000000000;'
+          )
+          content = content.replace('CODE_SIGN_STYLE = Automatic;', 'CODE_SIGN_STYLE = Manual;')
+          with open('Runner.xcodeproj/project.pbxproj', 'w') as f:
+              f.write(content)
+          print('DEVELOPMENT_TEAM and CODE_SIGN_STYLE configured')
+          PYEOF
+
           cd ..
-          flutter build ios --release --no-codesign --no-tree-shake-icons
+          flutter build ios --release --no-codesign --no-tree-shake-icons --no-pub --skip-pods
 
       - name: Copy Node.js files to App Bundle
         run: |
