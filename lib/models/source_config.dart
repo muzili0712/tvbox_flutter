@@ -8,11 +8,9 @@ class SourceConfig {
   final String name;
   final String url;
   final bool isEnabled;
-  
-  // CatPawOpen 相关字段
-  final String? spiderKey;      // catpawopen Spider key
-  final int? spiderType;        // catpawopen Spider type (3=视频, 40=网盘等)
-  final String? sourceType;     // 数据源类型: 'catpawopen' 或 'legacy'
+  final String? spiderKey;
+  final int? spiderType;
+  final String? sourceType;
 
   SourceConfig({
     required this.id,
@@ -34,7 +32,6 @@ class SourceConfig {
     );
   }
 
-  /// 创建 CatPawOpen 数据源
   factory SourceConfig.catPawOpen({
     required String id,
     required String name,
@@ -49,6 +46,34 @@ class SourceConfig {
       spiderKey: spiderKey,
       spiderType: spiderType,
       sourceType: 'catpawopen',
+    );
+  }
+
+  factory SourceConfig.remote({
+    required String id,
+    required String name,
+    required String url,
+  }) {
+    return SourceConfig(
+      id: id,
+      name: name,
+      url: url,
+      isEnabled: true,
+      sourceType: 'remote',
+    );
+  }
+
+  factory SourceConfig.local({
+    required String id,
+    required String name,
+    required String url,
+  }) {
+    return SourceConfig(
+      id: id,
+      name: name,
+      url: url,
+      isEnabled: true,
+      sourceType: 'local',
     );
   }
 

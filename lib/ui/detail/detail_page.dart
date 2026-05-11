@@ -30,20 +30,60 @@ class _DetailPageState extends State<DetailPage> {
   Future<void> _loadDetail() async {
     setState(() => _isLoading = true);
     try {
-      final data = await NodeJSService.instance.getVideoDetail(widget.videoId);
-      final detail = VideoDetail.fromJson(data);
-      final historyProvider = Provider.of<HistoryProvider>(context, listen: false);
-      historyProvider.addToHistory(
-        VideoItem(
-          id: detail.id,
-          name: detail.name,
-          cover: detail.cover,
-          desc: detail.desc,
-        ),
-      );
-      setState(() {
-        _detail = detail;
-      });
+      final result =
+          await NodeJSService.instance.getVideoDetail(videoId: widget.videoId);
+      final list = result['list'] as List<dynamic>? ?? [];
+      if (list.isNotEmpty) {
+        final vod = list.first as Map<String, dynamic>;
+
+        final playFrom =
+            (vod['vod_play_from'] as String? ?? '').split('\$\$\$');
+        final playUrl =
+            (vod['vod_play_url'] as String? ?? '').split('\$\$\$');
+
+        List<Episode> episodes = [];
+        for (int i = 0; i < playUrl.length && i < playFrom.length; i++) {
+          final sources = playUrl[i].split('#');
+          final sourceName = playFrom[i];
+          for (final source in sources) {
+            final parts = source.split('\$');
+            if (parts.length >= 2) {
+              episodes.add(Episode(
+                name: parts[0],
+                url: parts[1],
+                sourceName: sourceName,
+              ));
+            }
+          }
+        }
+
+        final detail = VideoDetail(
+          id: vod['vod_id']?.toString() ?? '',
+          name: vod['vod_name']?.toString() ?? '',
+          cover: vod['vod_pic']?.toString() ?? '',
+          desc: vod['vod_content']?.toString() ?? '',
+          year: vod['vod_year']?.toString(),
+          area: vod['vod_area']?.toString(),
+          director: vod['vod_director']?.toString(),
+          actor: vod['vod_actor']?.toString(),
+          episodes: episodes,
+        );
+
+        final historyProvider =
+            Provider.of<HistoryProvider>(context, listen: false);
+        historyProvider.addToHistory(
+          VideoItem(
+            id: detail.id,
+            name: detail.name,
+            cover: detail.cover,
+            desc: detail.desc,
+          ),
+        );
+
+        setState(() {
+          _detail = detail;
+        });
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('加载失败: $e')),
@@ -107,10 +147,13 @@ class _DetailPageState extends State<DetailPage> {
                   if (detail.desc != null) Text('简介：${detail.desc}'),
                   if (detail.year != null) Text('年份：${detail.year}'),
                   if (detail.area != null) Text('地区：${detail.area}'),
-                  if (detail.director != null) Text('导演：${detail.director}'),
+                  if (detail.director != null)
+                    Text('导演：${detail.director}'),
                   if (detail.actor != null) Text('演员：${detail.actor}'),
                   const Divider(),
-                  const Text('选集', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('选集',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -127,8 +170,20 @@ class _DetailPageState extends State<DetailPage> {
                 final episode = detail.episodes[index];
                 return ElevatedButton(
                   onPressed: () async {
-                    final source = episode.sources.first;
-                    final playUrl = await NodeJSService.instance.getPlayUrl(source.url);
+                    final result =
+                        await NodeJSService.instance.getPlayUrl(
+                      flag: episode.sourceName ?? '',
+                      id: episode.url,
+                    );
+                    final playUrl = result['url']?.toString() ??
+                        result['parse']?.toString() ??
+                        '';
+                    if (playUrl.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('获取播放地址失败')),
+                      );
+                      return;
+                    }
                     Navigator.push(
                       context,
                       MaterialPageRoute(

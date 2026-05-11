@@ -35,22 +35,12 @@ Map<String, dynamic> _$VideoDetailToJson(VideoDetail instance) =>
 
 Episode _$EpisodeFromJson(Map<String, dynamic> json) => Episode(
       name: json['name'] as String,
-      sources: (json['sources'] as List<dynamic>)
-          .map((s) => Source.fromJson(s as Map<String, dynamic>))
-          .toList(),
+      url: json['url'] as String,
+      sourceName: json['sourceName'] as String?,
     );
 
 Map<String, dynamic> _$EpisodeToJson(Episode instance) => <String, dynamic>{
       'name': instance.name,
-      'sources': instance.sources.map((s) => s.toJson()).toList(),
-    };
-
-Source _$SourceFromJson(Map<String, dynamic> json) => Source(
-      name: json['name'] as String,
-      url: json['url'] as String,
-    );
-
-Map<String, dynamic> _$SourceToJson(Source instance) => <String, dynamic>{
-      'name': instance.name,
       'url': instance.url,
+      'sourceName': instance.sourceName,
     };

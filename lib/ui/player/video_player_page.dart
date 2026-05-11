@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/providers/player_provider.dart';
 import 'package:tvbox_flutter/models/video_detail.dart';
+import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:tvbox_flutter/ui/player/vlc_player.dart';
 import 'package:tvbox_flutter/ui/player/system_player.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -66,21 +67,32 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       _isLoading = true;
     });
     final episode = widget.videoDetail!.episodes[index];
-    final source = episode.sources[_currentSourceIndex];
-    final playUrl = await Provider.of<PlayerProvider>(context, listen: false).getPlayUrl(source.url);
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => VideoPlayerPage(
-          playUrl: playUrl,
-          title: '${widget.videoDetail!.name} 第${index + 1}集',
-          videoDetail: widget.videoDetail,
-          initialEpisodeIndex: index,
-          initialSourceIndex: _currentSourceIndex,
+    try {
+      final result = await NodeJSService.instance.getPlayUrl(
+        flag: episode.sourceName ?? '',
+        id: episode.url,
+      );
+      final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
+      if (playUrl.isEmpty || !mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerPage(
+            playUrl: playUrl,
+            title: '${widget.videoDetail!.name} - ${episode.name}',
+            videoDetail: widget.videoDetail,
+            initialEpisodeIndex: index,
+            initialSourceIndex: 0,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('切换集数失败: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _changeSource(int index) async {
@@ -90,21 +102,32 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       _isLoading = true;
     });
     final episode = widget.videoDetail!.episodes[_currentEpisodeIndex];
-    final source = episode.sources[index];
-    final playUrl = await Provider.of<PlayerProvider>(context, listen: false).getPlayUrl(source.url);
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => VideoPlayerPage(
-          playUrl: playUrl,
-          title: '${widget.videoDetail!.name} 第${_currentEpisodeIndex + 1}集',
-          videoDetail: widget.videoDetail,
-          initialEpisodeIndex: _currentEpisodeIndex,
-          initialSourceIndex: index,
+    try {
+      final result = await NodeJSService.instance.getPlayUrl(
+        flag: episode.sourceName ?? '',
+        id: episode.url,
+      );
+      final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
+      if (playUrl.isEmpty || !mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VideoPlayerPage(
+            playUrl: playUrl,
+            title: '${widget.videoDetail!.name} - ${episode.name}',
+            videoDetail: widget.videoDetail,
+            initialEpisodeIndex: _currentEpisodeIndex,
+            initialSourceIndex: index,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('切换源失败: $e')),
+        );
+      }
+    }
   }
 
   @override

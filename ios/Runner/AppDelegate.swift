@@ -2,7 +2,7 @@ import Flutter
 import UIKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
     private var nodeJSChannel: FlutterMethodChannel?
     private var eventChannel: FlutterEventChannel?
     fileprivate var eventSink: FlutterEventSink?
@@ -11,24 +11,17 @@ import UIKit
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        print("🚀 AppDelegate.application called")
-        let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
-        print("✅ Application launched with result: \(result)")
-        return result
+        let controller = window?.rootViewController as? FlutterViewController
+        
+        setupNodeJSChannel(with: controller)
+        setupEventChannel(with: controller)
+        
+        return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
 
-    func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-        print("🔧 Initializing Flutter engine")
-        GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-        print("✅ Plugins registered")
-
-        setupNodeJSChannel(with: engineBridge.pluginRegistry)
-        setupEventChannel(with: engineBridge.pluginRegistry)
-    }
-
-    private func setupNodeJSChannel(with registrar: FlutterPluginRegistry) {
-        guard let controller = window?.rootViewController as? FlutterViewController else {
-            print("❌ Cannot get FlutterViewController")
+    private func setupNodeJSChannel(with controller: FlutterViewController?) {
+        guard let controller = controller else {
+            print("Cannot get FlutterViewController")
             return
         }
 
@@ -40,18 +33,15 @@ import UIKit
         nodeJSChannel?.setMethodCallHandler { [weak self] (call, result) in
             switch call.method {
             case "startNodeJS":
-                print("📱 Received startNodeJS request")
                 NodeJSManager.shared().startNodeJS { success in
                     result(success)
                 }
 
             case "getNativeServerPort":
-                print("📱 Received getNativeServerPort request")
                 let port = NodeJSManager.shared().getNativeServerPort()
                 result(port)
 
             case "stopNodeJS":
-                print("📱 Received stopNodeJS request")
                 NodeJSManager.shared().stopNodeJS()
                 result(nil)
 
@@ -61,9 +51,9 @@ import UIKit
         }
     }
 
-    private func setupEventChannel(with registrar: FlutterPluginRegistry) {
-        guard let controller = window?.rootViewController as? FlutterViewController else {
-            print("❌ Cannot get FlutterViewController for event channel")
+    private func setupEventChannel(with controller: FlutterViewController?) {
+        guard let controller = controller else {
+            print("Cannot get FlutterViewController for event channel")
             return
         }
 
@@ -77,7 +67,6 @@ import UIKit
     }
 
     func onNodePortReceived(_ port: Int) {
-        print("📡 Notifying Flutter: Node.js port = \(port)")
         eventSink?(port)
     }
 }

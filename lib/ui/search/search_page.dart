@@ -20,13 +20,17 @@ class _SearchPageState extends State<SearchPage> {
   Future<void> _search() async {
     final keyword = _controller.text.trim();
     if (keyword.isEmpty) return;
-    
+
     setState(() => _isLoading = true);
-    
+
     try {
-      final results = await NodeJSService.instance.search(keyword);
+      final result = await NodeJSService.instance.search(keyword: keyword);
+      final list = result['list'] as List<dynamic>? ?? [];
       setState(() {
-        _results = results.map((json) => VideoItem.fromJson(json)).toList();
+        _results = list
+            .map((json) =>
+                VideoItem.fromJson(json as Map<String, dynamic>))
+            .toList();
       });
     } catch (e) {
       print('Search error: $e');
@@ -68,13 +72,13 @@ class _SearchPageState extends State<SearchPage> {
         ),
       );
     }
-    
+
     if (_results.isEmpty) {
       return const Center(
         child: Text('输入关键词开始搜索'),
       );
     }
-    
+
     return GridView.builder(
       padding: const EdgeInsets.all(8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

@@ -35,31 +35,17 @@ class VideoDetail {
 @JsonSerializable()
 class Episode {
   final String name;
-  final List<Source> sources;
+  final String url;
+  final String? sourceName;
 
   Episode({
     required this.name,
-    required this.sources,
+    required this.url,
+    this.sourceName,
   });
 
   factory Episode.fromJson(Map<String, dynamic> json) =>
       _$EpisodeFromJson(json);
 
   Map<String, dynamic> toJson() => _$EpisodeToJson(this);
-}
-
-@JsonSerializable()
-class Source {
-  final String name;
-  final String url;
-
-  Source({
-    required this.name,
-    required this.url,
-  });
-
-  factory Source.fromJson(Map<String, dynamic> json) =>
-      _$SourceFromJson(json);
-
-  Map<String, dynamic> toJson() => _$SourceToJson(this);
 }

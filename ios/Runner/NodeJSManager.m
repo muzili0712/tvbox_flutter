@@ -8,7 +8,6 @@
 @property (nonatomic, assign) BOOL isRunning;
 @property (nonatomic, assign) int nativeServerPort;
 @property (nonatomic, strong) GCDWebServer *webServer;
-@property (nonatomic, copy) void (^pendingCompletion)(BOOL);
 @end
 
 @implementation NodeJSManager
@@ -114,6 +113,26 @@
             });
         }
         return [GCDWebServerDataResponse responseWithText:@"OK"];
+    }];
+
+    [self.webServer addHandlerForMethod:@"POST" path:@"/msg" requestClass:[GCDWebServerDataRequest class] processBlock:^GCDWebServerResponse * _Nullable(GCDWebServerDataRequest * _Nonnull request) {
+        NSDictionary *data = @{};
+        if (request.data) {
+            NSError *error;
+            data = [NSJSONSerialization JSONObjectWithData:request.data options:0 error:&error] ?: @{};
+        }
+        NSString *action = data[@"action"] ?: @"";
+        NSDictionary *params = data[@"params"] ?: @{};
+        
+        id result = nil;
+        if ([action isEqualToString:@"echo"]) {
+            result = params;
+        } else {
+            result = @{@"error": @"unknown action"};
+        }
+        
+        NSData *responseData = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
+        return [GCDWebServerDataResponse responseWithData:responseData contentType:@"application/json"];
     }];
 
     NSError *error;
