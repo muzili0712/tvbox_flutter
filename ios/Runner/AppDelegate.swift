@@ -8,6 +8,7 @@ import UIKit
     fileprivate var eventSink: FlutterEventSink?
     fileprivate var managementPort: Int = 0
     fileprivate var spiderPort: Int = 0
+    fileprivate var isNodeReady: Bool = false
 
     override func application(
         _ application: UIApplication,
@@ -22,6 +23,20 @@ import UIKit
             self,
             selector: #selector(handleNodePortNotification(_:)),
             name: NSNotification.Name("NodeServerPortReceived"),
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNodeReady(_:)),
+            name: NSNotification.Name("NodeReady"),
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleNodeMessage(_:)),
+            name: NSNotification.Name("NodeMessageReceived"),
             object: nil
         )
 
@@ -53,6 +68,9 @@ import UIKit
             case "getSpiderPort":
                 result(NodeJSManager.shared().getSpiderPort())
 
+            case "isNodeReady":
+                result(NodeJSManager.shared().isNodeReady)
+
             case "stopNodeJS":
                 NodeJSManager.shared().stopNodeJS()
                 result(nil)
@@ -72,7 +90,7 @@ import UIKit
                 }
 
             case "deleteSource":
-                NodeJSManager.shared().deleteSource(completion: { success in
+                NodeJSManager.shared().deleteSource(withCompletion: { success in
                     result(success)
                 })
 
@@ -109,6 +127,27 @@ import UIKit
         }
 
         let eventData: [String: Any] = ["port": port, "type": type]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: eventData),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            eventSink?(jsonString)
+        }
+    }
+
+    @objc private func handleNodeReady(_ notification: Notification) {
+        isNodeReady = true
+
+        let eventData: [String: Any] = ["event": "ready"]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: eventData),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            eventSink?(jsonString)
+        }
+    }
+
+    @objc private func handleNodeMessage(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let message = userInfo["message"] as? String else { return }
+
+        let eventData: [String: Any] = ["event": "message", "message": message]
         if let jsonData = try? JSONSerialization.data(withJSONObject: eventData),
            let jsonString = String(data: jsonData, encoding: .utf8) {
             eventSink?(jsonString)

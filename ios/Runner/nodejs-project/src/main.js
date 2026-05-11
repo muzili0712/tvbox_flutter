@@ -1,11 +1,18 @@
-import { createServer } from 'http';
-import Fastify from 'fastify';
-import axios from 'axios';
-import { registerSpider, clearSpiders, spiders, spiderPrefix } from './router.js';
+const { createServer } = require('http');
+const axios = require('axios');
+const { registerSpider, clearSpiders, spiders, spiderPrefix } = require('./router.js');
 
+let addon = null;
 let sourceModule = null;
 let nativeServerPort = 0;
 let managementPort = 0;
+let isReady = false;
+
+try {
+    addon = process._linkedBinding('myaddon');
+} catch (e) {
+    addon = null;
+}
 
 const nativePortIdx = process.argv.indexOf('--native-port');
 if (nativePortIdx !== -1 && process.argv[nativePortIdx + 1]) {
@@ -22,6 +29,7 @@ globalThis.catServerFactory = (handle) => {
         if (nativeServerPort > 0) {
             axios.get(`http://127.0.0.1:${nativeServerPort}/onCatPawOpenPort?port=${port}&type=spider`).catch(() => {});
         }
+        console.log('Spider server running on ' + port);
     });
     server.on('close', () => {
         console.log('Spider server closed on ' + port);
@@ -35,7 +43,7 @@ function loadScript(path) {
     const indexJSPath = path + '/index.js';
     const indexConfigJSPath = path + '/index.config.js';
     delete require.cache[require.resolve(indexJSPath)];
-    try { delete require.cache[require.resolve(indexConfigJSPath)]; } catch(e) {}
+    try { delete require.cache[require.resolve(indexConfigJSPath)]; } catch (e) {}
     sourceModule = require(indexJSPath);
     let config = {};
     try {
@@ -47,70 +55,148 @@ function loadScript(path) {
     sourceModule.start(config);
 }
 
-const managementServer = Fastify({ logger: false });
-
-managementServer.get('/check', async () => {
-    return { run: true, management: true };
-});
-
-managementServer.post('/command', async (request) => {
-    const data = request.body || {};
-    switch (data.action) {
-        case 'run':
-            await sourceModule?.stop?.();
-            loadScript(data.path);
-            return { success: true };
-        case 'nativeServerPort':
-            nativeServerPort = data.port;
-            return { success: true };
-        default:
-            return { error: 'unknown action' };
-    }
-});
-
-managementServer.post('/source/loadPath', async (request) => {
-    const { path: sourcePath } = request.body || {};
-    if (!sourcePath) {
-        return { error: 'path is required' };
-    }
-    try {
-        await sourceModule?.stop?.();
-        clearSpiders();
-        loadScript(sourcePath);
-        if (spiders.length === 0 && sourceModule === null) {
-            return { error: 'Source loaded but no spiders registered' };
+function sendMessageToNative(message) {
+    if (addon && addon.sendMessageToNative) {
+        try {
+            addon.sendMessageToNative(message);
+            return;
+        } catch (e) {
+            console.log('addon.sendMessageToNative failed:', e.message);
         }
-        return { success: true, message: 'Source loaded from path' };
-    } catch (e) {
-        return { error: e.message };
     }
-});
+    if (nativeServerPort > 0) {
+        axios.post(`http://127.0.0.1:${nativeServerPort}/onMessage`, { message: message }).catch(() => {});
+    }
+}
 
-managementServer.get('/source/list', async () => {
-    const sourceList = spiders.map(s => ({
-        key: s.meta.key,
-        name: s.meta.name,
-        type: s.meta.type,
-    }));
-    return { sources: sourceList };
-});
+function handleNativeMessage(msg) {
+    try {
+        const data = JSON.parse(msg);
+        switch (data.action) {
+            case 'run':
+                try {
+                    if (sourceModule && typeof sourceModule.stop === 'function') {
+                        sourceModule.stop();
+                    }
+                } catch (e) {}
+                clearSpiders();
+                loadScript(data.path);
+                break;
+            case 'nativeServerPort':
+                nativeServerPort = data.port;
+                break;
+            default:
+                break;
+        }
+    } catch (e) {
+        console.log('handleNativeMessage error:', e);
+    }
+}
 
-managementServer.get('/source/status', async () => {
-    return {
-        sourceLoaded: sourceModule !== null,
-        spiderCount: spiders.length,
-    };
-});
+if (addon && addon.registerCallback) {
+    addon.registerCallback((msg) => {
+        console.log('Message from Native:', msg);
+        handleNativeMessage(msg);
+    });
+}
 
-managementServer.listen({ port: 0, host: '127.0.0.1' }, (err) => {
-    if (err) {
-        console.log('Management server error:', err);
+const mgmtServer = createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
         return;
     }
-    managementPort = managementServer.server.address().port;
+
+    const url = new URL(req.url, `http://127.0.0.1`);
+
+    if (req.method === 'GET' && url.pathname === '/check') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ run: true, ready: isReady }));
+        return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/source/status') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            sourceLoaded: sourceModule !== null,
+            spiderCount: spiders.length,
+            ready: isReady,
+        }));
+        return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/source/list') {
+        const sourceList = spiders.map(s => ({
+            key: s.meta.key,
+            name: s.meta.name,
+            type: s.meta.type,
+        }));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sources: sourceList }));
+        return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/command') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                handleNativeMessage(JSON.stringify(data));
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/source/loadPath') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                const sourcePath = data.path;
+                if (!sourcePath) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'path is required' }));
+                    return;
+                }
+                try {
+                    if (sourceModule && typeof sourceModule.stop === 'function') {
+                        sourceModule.stop();
+                    }
+                } catch (e) {}
+                clearSpiders();
+                loadScript(sourcePath);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: 'Source loaded from path' }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not found' }));
+});
+
+mgmtServer.listen(0, '127.0.0.1', () => {
+    managementPort = mgmtServer.address().port;
     if (nativeServerPort > 0) {
         axios.get(`http://127.0.0.1:${nativeServerPort}/onCatPawOpenPort?port=${managementPort}&type=management`).catch(() => {});
     }
+    isReady = true;
+    sendMessageToNative('ready');
 });
 
 process.on('uncaughtException', function (err) {

@@ -7,6 +7,7 @@
 
 @interface NodeJSManager ()
 @property (nonatomic, assign) BOOL isRunning;
+@property (nonatomic, assign) BOOL isNodeReady;
 @property (nonatomic, assign) int nativeServerPort;
 @property (nonatomic, assign) int managementPort;
 @property (nonatomic, assign) int spiderPort;
@@ -30,6 +31,7 @@
         _nativeServerPort = 0;
         _managementPort = 0;
         _spiderPort = 0;
+        _isNodeReady = NO;
     }
     return self;
 }
@@ -101,6 +103,7 @@
 
                 dispatch_async(dispatch_get_main_queue(), ^{
                     self.isRunning = NO;
+                    self.isNodeReady = NO;
                     [self.webServer stop];
                 });
             } else {
@@ -138,6 +141,33 @@
         return [GCDWebServerDataResponse responseWithText:@"OK"];
     }];
 
+    [self.webServer addHandlerForMethod:@"POST" path:@"/onMessage" requestClass:[GCDWebServerDataRequest class] processBlock:^GCDWebServerResponse * _Nullable(GCDWebServerDataRequest * _Nonnull request) {
+        NSData *bodyData = request.data;
+        if (bodyData) {
+            NSError *error;
+            NSDictionary *body = [NSJSONSerialization JSONObjectWithData:bodyData options:0 error:&error];
+            if (!error && body) {
+                NSString *message = body[@"message"];
+                if (message) {
+                    NSLog(@"Message from Node.js: %@", message);
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if ([message isEqualToString:@"ready"]) {
+                            self.isNodeReady = YES;
+                            [[NSNotificationCenter defaultCenter] postNotificationName:@"NodeReady"
+                                                                                object:nil
+                                                                              userInfo:nil];
+                        } else {
+                            [[NSNotificationCenter defaultCenter] postNotificationName:@"NodeMessageReceived"
+                                                                                object:nil
+                                                                              userInfo:@{@"message": message}];
+                        }
+                    });
+                }
+            }
+        }
+        return [GCDWebServerDataResponse responseWithText:@"OK"];
+    }];
+
     NSError *error;
     [self.webServer startWithOptions:@{
         GCDWebServerOption_Port: @0,
@@ -154,6 +184,26 @@
     }
 }
 
+- (void)waitForNodeReady:(void (^)(BOOL))completion {
+    if (self.isNodeReady) {
+        if (completion) completion(YES);
+        return;
+    }
+
+    __block id observer = [[NSNotificationCenter defaultCenter] addObserverForName:@"NodeReady"
+                                                                            object:nil
+                                                                             queue:[NSOperationQueue mainQueue]
+                                                                        usingBlock:^(NSNotification * _Nonnull note) {
+        [[NSNotificationCenter defaultCenter] removeObserver:observer];
+        if (completion) completion(YES);
+    }];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] removeObserver:observer];
+        if (completion) completion(NO);
+    });
+}
+
 - (void)loadSourceFromURL:(NSString *)urlString
                completion:(void (^)(BOOL success, NSString * _Nullable message))completion {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -163,15 +213,14 @@
         NSString *configJSPath = [sourcePath stringByAppendingPathComponent:@"index.config.js"];
         NSString *configMd5Path = [sourcePath stringByAppendingPathComponent:@"index.config.js.md5"];
 
-        NSURLSession *session = [NSURLSession sharedSession];
-        dispatch_group_t group = dispatch_group_create();
-
         __block NSData *jsData = nil;
         __block NSData *md5Data = nil;
         __block NSData *configData = nil;
         __block NSData *configMd5Data = nil;
         __block NSError *jsError = nil;
         __block NSError *configError = nil;
+
+        dispatch_group_t group = dispatch_group_create();
 
         dispatch_group_enter(group);
         [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:urlString] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
@@ -253,8 +302,19 @@
 }
 
 - (void)sendLoadCommandToNodeJS:(NSString *)path completion:(void (^)(BOOL, NSString * _Nullable))completion {
+    [self sendLoadCommandToNodeJS:path retryCount:3 completion:completion];
+}
+
+- (void)sendLoadCommandToNodeJS:(NSString *)path retryCount:(int)retryCount completion:(void (^)(BOOL, NSString * _Nullable))completion {
     if (self.managementPort <= 0) {
-        if (completion) completion(NO, @"Management server not ready");
+        if (retryCount > 0) {
+            NSLog(@"Management port not ready, retrying... (%d left)", retryCount);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self sendLoadCommandToNodeJS:path retryCount:retryCount - 1 completion:completion];
+            });
+            return;
+        }
+        if (completion) completion(NO, @"Management server not ready after retries");
         return;
     }
 
@@ -263,17 +323,54 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"POST";
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    request.timeoutInterval = 15.0;
 
     NSDictionary *body = @{@"path": path};
     request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
 
     [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
+            if (retryCount > 0) {
+                NSLog(@"Load command failed: %@, retrying... (%d left)", error.localizedDescription, retryCount);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self sendLoadCommandToNodeJS:path retryCount:retryCount - 1 completion:completion];
+                });
+                return;
+            }
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (completion) completion(NO, error.localizedDescription);
             });
             return;
         }
+
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (httpResponse.statusCode >= 400) {
+            NSString *responseBody = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"";
+            if (retryCount > 0 && httpResponse.statusCode >= 500) {
+                NSLog(@"Load command server error (%ld): %@, retrying... (%d left)", (long)httpResponse.statusCode, responseBody, retryCount);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self sendLoadCommandToNodeJS:path retryCount:retryCount - 1 completion:completion];
+                });
+                return;
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) completion(NO, [NSString stringWithFormat:@"Server error: %@", responseBody]);
+            });
+            return;
+        }
+
+        NSDictionary *responseDict = nil;
+        if (data) {
+            responseDict = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        }
+
+        if (responseDict && responseDict[@"error"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) completion(NO, [NSString stringWithFormat:@"Load error: %@", responseDict[@"error"]]);
+            });
+            return;
+        }
+
         dispatch_async(dispatch_get_main_queue(), ^{
             if (completion) completion(YES, @"Source loaded successfully");
         });
@@ -293,6 +390,7 @@
 
 - (void)stopNodeJS {
     self.isRunning = NO;
+    self.isNodeReady = NO;
     [self.webServer stop];
     self.webServer = nil;
     self.nativeServerPort = 0;

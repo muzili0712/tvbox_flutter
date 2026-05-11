@@ -3,6 +3,7 @@
 @interface NodeJSManager : NSObject
 
 @property (nonatomic, assign, readonly) BOOL isRunning;
+@property (nonatomic, assign, readonly) BOOL isNodeReady;
 @property (nonatomic, assign, readonly) int nativeServerPort;
 @property (nonatomic, assign, readonly) int managementPort;
 @property (nonatomic, assign, readonly) int spiderPort;

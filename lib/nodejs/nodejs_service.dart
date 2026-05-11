@@ -1,69 +1,77 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
-class NodeJSService extends ChangeNotifier {
-  static final NodeJSService instance = NodeJSService._internal();
-
-  bool _isInitialized = false;
-  bool get isInitialized => _isInitialized;
-
-  int? _managementPort;
-  int? _spiderPort;
-  int? get managementPort => _managementPort;
-  int? get spiderPort => _spiderPort;
-
-  String? _currentSpiderKey;
-  int? _currentSpiderType;
-
-  Completer<void>? _managementPortCompleter;
-  Completer<void>? _spiderPortCompleter;
-  StreamSubscription<dynamic>? _eventSubscription;
-
+class NodeJSService {
   static const MethodChannel _channel = MethodChannel('com.tvbox/nodejs');
-  static const EventChannel _eventChannel =
-      EventChannel('com.tvbox/nodejs/events');
+  static const EventChannel _eventChannel = EventChannel('com.tvbox/nodejs/events');
 
+  static final NodeJSService _instance = NodeJSService._internal();
+  factory NodeJSService() => _instance;
   NodeJSService._internal();
 
+  static NodeJSService get instance => _instance;
+
+  bool _isInitialized = false;
+  bool _isNodeReady = false;
+  int _managementPort = 0;
+  int _spiderPort = 0;
+  int _nativeServerPort = 0;
+  String _currentSpiderKey = '';
+  int _currentSpiderType = 3;
+  String _websiteUrl = '';
+  Completer<void>? _readyCompleter;
+  Completer<void>? _managementPortCompleter;
+  Completer<void>? _spiderPortCompleter;
+  StreamSubscription? _eventSubscription;
+
+  bool get isInitialized => _isInitialized;
+  bool get isNodeReady => _isNodeReady;
+  int get managementPort => _managementPort;
+  int get spiderPort => _spiderPort;
+  bool get hasSpiderServer => _spiderPort > 0;
+
+  String _spiderBaseUrl() => 'http://127.0.0.1:$_spiderPort';
+  String _spiderPath() => '/$_currentSpiderKey/$_currentSpiderType';
+
   void _setupEventListener() {
+    _eventSubscription?.cancel();
     _eventSubscription = _eventChannel.receiveBroadcastStream().listen(
-      (dynamic event) {
+      (event) {
         if (event is String) {
           try {
             final data = jsonDecode(event) as Map<String, dynamic>;
-            final port = data['port'] as int;
-            final type = data['type'] as String;
-            _onPortReceived(port, type);
+            if (data.containsKey('event')) {
+              final eventType = data['event'] as String;
+              if (eventType == 'ready') {
+                _isNodeReady = true;
+                _readyCompleter?.complete();
+              } else if (eventType == 'message') {
+                print('Node.js message: ${data['message']}');
+              }
+            } else if (data.containsKey('port') && data.containsKey('type')) {
+              final port = data['port'] as int;
+              final type = data['type'] as String;
+              if (type == 'management') {
+                _managementPort = port;
+                print('Management port received: $port');
+                _managementPortCompleter?.complete();
+              } else if (type == 'spider') {
+                _spiderPort = port;
+                print('Spider port received: $port');
+                _spiderPortCompleter?.complete();
+              }
+            }
           } catch (e) {
             print('Event parse error: $e');
           }
-        } else if (event is int) {
-          _onPortReceived(event, 'spider');
         }
       },
-      onError: (dynamic error) {
+      onError: (error) {
         print('Event channel error: $error');
       },
     );
-  }
-
-  void _onPortReceived(int port, String type) {
-    if (type == 'management') {
-      _managementPort = port;
-      if (_managementPortCompleter != null &&
-          !_managementPortCompleter!.isCompleted) {
-        _managementPortCompleter!.complete();
-      }
-    } else if (type == 'spider') {
-      _spiderPort = port;
-      if (_spiderPortCompleter != null && !_spiderPortCompleter!.isCompleted) {
-        _spiderPortCompleter!.complete();
-      }
-    }
-    notifyListeners();
   }
 
   Future<void> initialize() async {
@@ -72,231 +80,42 @@ class NodeJSService extends ChangeNotifier {
     _setupEventListener();
 
     try {
-      _isInitialized = await _channel.invokeMethod('startNodeJS') ?? false;
-      if (!_isInitialized) {
-        throw Exception('Node.js failed to start');
+      _readyCompleter = Completer<void>();
+      _managementPortCompleter = Completer<void>();
+
+      final result = await _channel.invokeMethod('startNodeJS');
+      _isInitialized = result == true;
+
+      if (_isInitialized) {
+        final readyTimeout = Timer(const Duration(seconds: 15), () {
+          if (_readyCompleter != null && !_readyCompleter!.isCompleted) {
+            print('Warning: Node.js ready signal timeout, proceeding anyway');
+            _readyCompleter!.complete();
+          }
+        });
+
+        await _readyCompleter!.future;
+        readyTimeout.cancel();
+
+        final mgmtTimeout = Timer(const Duration(seconds: 15), () {
+          if (_managementPortCompleter != null && !_managementPortCompleter!.isCompleted) {
+            print('Warning: Management port timeout, proceeding anyway');
+            _managementPortCompleter!.complete();
+          }
+        });
+
+        await _managementPortCompleter!.future;
+        mgmtTimeout.cancel();
       }
     } catch (e) {
+      print('Node.js initialization error: $e');
       _isInitialized = false;
-      return;
-    }
-
-    _managementPortCompleter = Completer<void>();
-    final mgmtTimeout = Timer(const Duration(seconds: 15), () {
-      if (_managementPortCompleter != null &&
-          !_managementPortCompleter!.isCompleted) {
-        _managementPortCompleter!.complete();
-      }
-    });
-    await _managementPortCompleter!.future;
-    mgmtTimeout.cancel();
-    _managementPortCompleter = null;
-
-    notifyListeners();
-  }
-
-  Future<bool> waitForSpiderPort(
-      {Duration timeout = const Duration(seconds: 30)}) async {
-    if (_spiderPort != null && _spiderPort! > 0) return true;
-
-    _spiderPortCompleter = Completer<void>();
-    final timer = Timer(timeout, () {
-      if (_spiderPortCompleter != null &&
-          !_spiderPortCompleter!.isCompleted) {
-        _spiderPortCompleter!.complete();
-      }
-    });
-    await _spiderPortCompleter!.future;
-    timer.cancel();
-    _spiderPortCompleter = null;
-
-    return _spiderPort != null && _spiderPort! > 0;
-  }
-
-  String get _spiderBaseUrl {
-    if (_spiderPort == null || _spiderPort! <= 0) {
-      throw Exception('Spider server port unknown');
-    }
-    return 'http://127.0.0.1:$_spiderPort';
-  }
-
-  String get _managementBaseUrl {
-    if (_managementPort == null || _managementPort! <= 0) {
-      throw Exception('Management server port unknown');
-    }
-    return 'http://127.0.0.1:$_managementPort';
-  }
-
-  Future<Map<String, dynamic>> _post(String baseUrl, String path,
-      [Map<String, dynamic>? body]) async {
-    final uri = Uri.parse('$baseUrl$path');
-    final response = await http
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: body != null ? jsonEncode(body) : null,
-        )
-        .timeout(const Duration(seconds: 30));
-    if (response.statusCode != 200) {
-      throw Exception('HTTP error ${response.statusCode}: ${response.body}');
-    }
-    final decoded = jsonDecode(response.body);
-    return decoded is Map<String, dynamic> ? decoded : {'data': decoded};
-  }
-
-  Future<Map<String, dynamic>> _get(String baseUrl, String path) async {
-    final uri = Uri.parse('$baseUrl$path');
-    final response = await http.get(uri).timeout(const Duration(seconds: 30));
-    if (response.statusCode != 200) {
-      throw Exception('HTTP error ${response.statusCode}: ${response.body}');
-    }
-    final decoded = jsonDecode(response.body);
-    return decoded is Map<String, dynamic> ? decoded : {'data': decoded};
-  }
-
-  String _spiderPath(String key, int type) => '/spider/$key/$type';
-
-  void setCurrentSpider(String key, int type) {
-    _currentSpiderKey = key;
-    _currentSpiderType = type;
-  }
-
-  Future<bool> checkHealth() async {
-    try {
-      final result = await _get(_managementBaseUrl, '/check');
-      return result['run'] == true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  Future<Map<String, dynamic>> getCatConfig() async {
-    try {
-      return await _get(_spiderBaseUrl, '/config');
-    } catch (e) {
-      return {};
-    }
-  }
-
-  Future<Map<String, dynamic>> initSpider(String key, int type) async {
-    return await _post(_spiderBaseUrl, _spiderPath(key, type) + '/init');
-  }
-
-  Future<Map<String, dynamic>> getHomeContent(
-      {String? key, int? type}) async {
-    final k = key ?? _currentSpiderKey;
-    final t = type ?? _currentSpiderType;
-    if (k == null || t == null) throw Exception('No spider selected');
-    return await _post(_spiderBaseUrl, _spiderPath(k, t) + '/home');
-  }
-
-  Future<Map<String, dynamic>> getCategoryContent({
-    required String categoryId,
-    int page = 1,
-    Map<String, dynamic>? filters,
-    String? key,
-    int? type,
-  }) async {
-    final k = key ?? _currentSpiderKey;
-    final t = type ?? _currentSpiderType;
-    if (k == null || t == null) throw Exception('No spider selected');
-    return await _post(_spiderBaseUrl, _spiderPath(k, t) + '/category', {
-      'id': categoryId,
-      'page': page,
-      'filters': filters ?? {},
-    });
-  }
-
-  Future<Map<String, dynamic>> getVideoDetail({
-    required String videoId,
-    String? key,
-    int? type,
-  }) async {
-    final k = key ?? _currentSpiderKey;
-    final t = type ?? _currentSpiderType;
-    if (k == null || t == null) throw Exception('No spider selected');
-    return await _post(
-        _spiderBaseUrl, _spiderPath(k, t) + '/detail', {'id': videoId});
-  }
-
-  Future<Map<String, dynamic>> getPlayUrl({
-    required String flag,
-    required String id,
-    String? key,
-    int? type,
-  }) async {
-    final k = key ?? _currentSpiderKey;
-    final t = type ?? _currentSpiderType;
-    if (k == null || t == null) throw Exception('No spider selected');
-    return await _post(
-        _spiderBaseUrl, _spiderPath(k, t) + '/play', {'flag': flag, 'id': id});
-  }
-
-  Future<Map<String, dynamic>> search({
-    required String keyword,
-    String? key,
-    int? type,
-  }) async {
-    final k = key ?? _currentSpiderKey;
-    final t = type ?? _currentSpiderType;
-    if (k == null || t == null) throw Exception('No spider selected');
-    return await _post(
-        _spiderBaseUrl, _spiderPath(k, t) + '/search', {'wd': keyword});
-  }
-
-  Future<String> getPlayUrlSimple(String playId) async {
-    final k = _currentSpiderKey;
-    final t = _currentSpiderType;
-    if (k == null || t == null) throw Exception('No spider selected');
-    final result = await _post(
-        _spiderBaseUrl, _spiderPath(k, t) + '/play', {'flag': '', 'id': playId});
-    return result['url']?.toString() ?? result['parse']?.toString() ?? '';
-  }
-
-  Future<String> getCloudDrivePlayUrl(String driveId, String fileId) async {
-    final k = _currentSpiderKey;
-    final t = _currentSpiderType;
-    if (k == null || t == null) throw Exception('No spider selected');
-    final result = await _post(
-        _spiderBaseUrl, _spiderPath(k, t) + '/play', {'flag': driveId, 'id': fileId});
-    return result['url']?.toString() ?? result['parse']?.toString() ?? '';
-  }
-
-  Future<String> getLivePlayUrl(String channelId) async {
-    final k = _currentSpiderKey;
-    final t = _currentSpiderType;
-    if (k == null || t == null) throw Exception('No spider selected');
-    final result = await _post(
-        _spiderBaseUrl, _spiderPath(k, t) + '/play', {'flag': 'live', 'id': channelId});
-    return result['url']?.toString() ?? result['parse']?.toString() ?? '';
-  }
-
-  Future<void> addCloudDrive(String type, Map<String, dynamic> config) async {
-    await _post(_spiderBaseUrl, '/cloud/add', {'type': type, 'config': config});
-  }
-
-  Future<List<Map<String, dynamic>>> listCloudDriveFiles(
-      String driveId, String path) async {
-    final result = await _post(
-        _spiderBaseUrl, '/cloud/files', {'driveId': driveId, 'path': path});
-    final list = result['files'] as List<dynamic>? ?? [];
-    return list.cast<Map<String, dynamic>>();
-  }
-
-  Future<List<Map<String, dynamic>>> getLiveChannels() async {
-    try {
-      final result = await _get(_spiderBaseUrl, '/live/channels');
-      final list = result['channels'] as List<dynamic>? ?? [];
-      return list.cast<Map<String, dynamic>>();
-    } catch (e) {
-      return [];
     }
   }
 
   Future<bool> loadSourceFromURL(String url) async {
     try {
-      final result =
-          await _channel.invokeMethod('loadSourceFromURL', {'url': url});
+      final result = await _channel.invokeMethod('loadSourceFromURL', {'url': url});
       if (result is Map && result['success'] == true) {
         await waitForSpiderPort();
         return true;
@@ -308,36 +127,272 @@ class NodeJSService extends ChangeNotifier {
     }
   }
 
+  Future<void> waitForSpiderPort({Duration timeout = const Duration(seconds: 30)}) async {
+    if (_spiderPort > 0) return;
+
+    _spiderPortCompleter = Completer<void>();
+    final timer = Timer(timeout, () {
+      if (_spiderPortCompleter != null && !_spiderPortCompleter!.isCompleted) {
+        print('Warning: Spider port timeout');
+        _spiderPortCompleter!.complete();
+      }
+    });
+
+    await _spiderPortCompleter!.future;
+    timer.cancel();
+  }
+
   Future<bool> deleteSource() async {
     try {
       final result = await _channel.invokeMethod('deleteSource');
-      _spiderPort = null;
-      notifyListeners();
+      _spiderPort = 0;
       return result == true;
     } catch (e) {
+      print('deleteSource error: $e');
       return false;
     }
   }
 
-  Future<Map<String, dynamic>> getSourceStatus() async {
+  Future<String?> getSourcePath() async {
     try {
-      return await _get(_managementBaseUrl, '/source/status');
+      final result = await _channel.invokeMethod('getSourcePath');
+      return result as String?;
     } catch (e) {
-      return {};
+      print('getSourcePath error: $e');
+      return null;
     }
   }
 
-  String getWebsiteUrl() {
-    if (_spiderPort == null || _spiderPort! <= 0) return '';
-    return 'http://127.0.0.1:$_spiderPort/website';
+  void setCurrentSpider(String key, int type) {
+    _currentSpiderKey = key;
+    _currentSpiderType = type;
   }
 
-  bool get hasSpiderServer => _spiderPort != null && _spiderPort! > 0;
+  String get currentSpiderKey => _currentSpiderKey;
+  int get currentSpiderType => _currentSpiderType;
 
-  @override
-  void dispose() {
-    _channel.invokeMethod('stopNodeJS');
+  void setWebsiteUrl(String url) {
+    _websiteUrl = url;
+  }
+
+  String getWebsiteUrl() => _websiteUrl;
+
+  Future<Map<String, dynamic>> getCatConfig() async {
+    if (_spiderPort <= 0) return {};
+    try {
+      final response = await http
+          .get(Uri.parse('${_spiderBaseUrl()}/config'))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('getCatConfig error: $e');
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>> getHomeContent() async {
+    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    try {
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/home';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('getHomeContent error: $e');
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>> getCategoryContent({
+    required String categoryId,
+    int page = 1,
+  }) async {
+    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    try {
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/category?t=${DateTime.now().millisecondsSinceEpoch}&cateId=$categoryId&page=$page';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('getCategoryContent error: $e');
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>> getVideoDetail({required String videoId}) async {
+    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    try {
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/detail?id=$videoId';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('getVideoDetail error: $e');
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>> getPlayUrl({
+    required String videoId,
+    required String flag,
+    required String playId,
+  }) async {
+    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    try {
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/play?flag=$flag&id=$videoId&playId=${Uri.encodeComponent(playId)}';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('getPlayUrl error: $e');
+    }
+    return {};
+  }
+
+  Future<String?> getPlayUrlSimple(String playId) async {
+    final result = await getPlayUrl(
+      videoId: '',
+      flag: '',
+      playId: playId,
+    );
+    return result['url'] as String?;
+  }
+
+  Future<Map<String, dynamic>> search({required String keyword, int page = 1}) async {
+    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    try {
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/search?wd=${Uri.encodeComponent(keyword)}&page=$page';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('search error: $e');
+    }
+    return {};
+  }
+
+  Future<List<Map<String, dynamic>>> getLiveChannels() async {
+    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return [];
+    try {
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/live';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          return data.cast<Map<String, dynamic>>();
+        }
+      }
+    } catch (e) {
+      print('getLiveChannels error: $e');
+    }
+    return [];
+  }
+
+  Future<String?> getLivePlayUrl(String channelId) async {
+    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return null;
+    try {
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/live/play?id=${Uri.encodeComponent(channelId)}';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['url'] as String?;
+      }
+    } catch (e) {
+      print('getLivePlayUrl error: $e');
+    }
+    return null;
+  }
+
+  Future<bool> addCloudDrive(String type, Map<String, dynamic> config) async {
+    if (_spiderPort <= 0) return false;
+    try {
+      final url = '${_spiderBaseUrl()}/cloud/add';
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'type': type, 'config': config}),
+      ).timeout(const Duration(seconds: 10));
+      return response.statusCode == 200;
+    } catch (e) {
+      print('addCloudDrive error: $e');
+    }
+    return false;
+  }
+
+  Future<String> listCloudDriveFiles(String driveId, String path) async {
+    if (_spiderPort <= 0) return '[]';
+    try {
+      final url = '${_spiderBaseUrl()}/cloud/files?driveId=$driveId&path=${Uri.encodeComponent(path)}';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return response.body;
+      }
+    } catch (e) {
+      print('listCloudDriveFiles error: $e');
+    }
+    return '[]';
+  }
+
+  Future<String?> getCloudDrivePlayUrl(String driveId, String fileId) async {
+    if (_spiderPort <= 0) return null;
+    try {
+      final url = '${_spiderBaseUrl()}/cloud/play?driveId=$driveId&fileId=${Uri.encodeComponent(fileId)}';
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['url'] as String?;
+      }
+    } catch (e) {
+      print('getCloudDrivePlayUrl error: $e');
+    }
+    return null;
+  }
+
+  Future<int> getNativeServerPort() async {
+    try {
+      final result = await _channel.invokeMethod('getNativeServerPort');
+      return result as int? ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  Future<int> getManagementPort() async {
+    try {
+      final result = await _channel.invokeMethod('getManagementPort');
+      return result as int? ?? 0;
+    } catch (e) {
+      return _managementPort;
+    }
+  }
+
+  Future<int> getSpiderPort() async {
+    try {
+      final result = await _channel.invokeMethod('getSpiderPort');
+      return result as int? ?? 0;
+    } catch (e) {
+      return _spiderPort;
+    }
+  }
+
+  Future<void> stop() async {
+    try {
+      await _channel.invokeMethod('stopNodeJS');
+    } catch (e) {
+      print('stopNodeJS error: $e');
+    }
+    _isInitialized = false;
+    _isNodeReady = false;
+    _managementPort = 0;
+    _spiderPort = 0;
+    _nativeServerPort = 0;
     _eventSubscription?.cancel();
-    super.dispose();
   }
 }
