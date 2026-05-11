@@ -57,12 +57,13 @@ class SourceProvider extends ChangeNotifier {
   Future<void> addSource(SourceConfig source) async {
     _sources.add(source);
     await _saveSources();
-    
+
     if (_currentSource == null) {
       _currentSource = source;
       await _saveCurrentSource();
+      await loadHomeContent();
     }
-    
+
     notifyListeners();
   }
 
