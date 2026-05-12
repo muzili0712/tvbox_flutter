@@ -234,10 +234,8 @@ class NodeJSService {
 
     if (_spiderPort <= 0) {
       result['error'] = 'spiderPort is 0';
-      return result;
+      return Map<String, dynamic>.from(result);
     }
-
-    final ts = DateTime.now().millisecondsSinceEpoch;
 
     final getPaths = <String>[];
     getPaths.add('/config');
@@ -279,12 +277,12 @@ class NodeJSService {
       try {
         final url = 'http://127.0.0.1:$_spiderPort$path';
         final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
-        result['GET $path'] = {
+        result['GET $path'] = <String, dynamic>{
           'status': response.statusCode,
           'body': response.body.length > 200 ? response.body.substring(0, 200) : response.body,
         };
       } catch (e) {
-        result['GET $path'] = {'error': e.toString()};
+        result['GET $path'] = <String, dynamic>{'error': e.toString()};
       }
     }
 
@@ -293,21 +291,21 @@ class NodeJSService {
       try {
         final url = 'http://127.0.0.1:$_spiderPort$path';
         final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
-        result['GET $path'] = {
+        result['GET $path'] = <String, dynamic>{
           'status': response.statusCode,
           'body': response.body.length > 200 ? response.body.substring(0, 200) : response.body,
         };
       } catch (e) {
-        result['GET $path'] = {'error': e.toString()};
+        result['GET $path'] = <String, dynamic>{'error': e.toString()};
       }
     }
 
     final postTests = <Map<String, dynamic>>[
-      {'path': '/', 'body': {'action': 'home'}},
-      {'path': '/', 'body': {'key': 'home'}},
-      {'path': '/home', 'body': {}},
-      {'path': '/api', 'body': {'type': 'home'}},
-      {'path': '/config', 'body': {'refresh': true}},
+      {'path': '/', 'body': <String, dynamic>{'action': 'home'}},
+      {'path': '/', 'body': <String, dynamic>{'key': 'home'}},
+      {'path': '/home', 'body': <String, dynamic>{}},
+      {'path': '/api', 'body': <String, dynamic>{'type': 'home'}},
+      {'path': '/config', 'body': <String, dynamic>{'refresh': true}},
     ];
 
     result['=== POST Requests ==='] = null;
@@ -321,16 +319,16 @@ class NodeJSService {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
         ).timeout(const Duration(seconds: 5));
-        result['POST $path body=$body'] = {
+        result['POST $path'] = <String, dynamic>{
           'status': response.statusCode,
           'body': response.body.length > 200 ? response.body.substring(0, 200) : response.body,
         };
       } catch (e) {
-        result['POST $path body=$body'] = {'error': e.toString()};
+        result['POST $path'] = <String, dynamic>{'error': e.toString()};
       }
     }
 
-    return result;
+    return Map<String, dynamic>.from(result);
   }
 
   Future<Map<String, dynamic>> getHomeContent() async {
