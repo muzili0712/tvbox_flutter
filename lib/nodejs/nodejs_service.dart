@@ -123,8 +123,8 @@ class NodeJSService {
         return true;
       }
       return false;
-    } on FlutterError catch (e) {
-      print('FlutterError in loadSourceFromURL: ${e.message}, code: ${e.code}, details: ${e.details}');
+    } on PlatformException catch (e) {
+      print('PlatformException in loadSourceFromURL: ${e.message}, code: ${e.code}, details: ${e.details}');
       _lastErrorMessage = e.message ?? 'Unknown error';
       return false;
     } catch (e) {
