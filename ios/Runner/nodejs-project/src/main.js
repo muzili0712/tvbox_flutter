@@ -1,6 +1,13 @@
 const { createServer } = require('http');
 const axios = require('axios');
+const { builtinModules } = require('module');
 const { registerSpider, clearSpiders, spiders, spiderPrefix } = require('./router.js');
+
+builtinModules.forEach(mod => {
+    if (!['trace_events'].includes(mod)) {
+        globalThis[mod] = require(mod);
+    }
+});
 
 let addon = null;
 let sourceModule = null;
