@@ -16,6 +16,13 @@ import UIKit
     ) -> Bool {
         let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
+        if window == nil {
+            let flutterViewController = FlutterViewController()
+            window = UIWindow(frame: UIScreen.main.bounds)
+            window?.rootViewController = flutterViewController
+            window?.makeKeyAndVisible()
+        }
+
         let controller = window?.rootViewController as? FlutterViewController
 
         setupNodeJSChannel(with: controller)
