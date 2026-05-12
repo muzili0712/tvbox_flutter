@@ -14,6 +14,8 @@ import UIKit
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+
         let controller = window?.rootViewController as? FlutterViewController
 
         setupNodeJSChannel(with: controller)
@@ -40,7 +42,7 @@ import UIKit
             object: nil
         )
 
-        return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+        return result
     }
 
     private func setupNodeJSChannel(with controller: FlutterViewController?) {
