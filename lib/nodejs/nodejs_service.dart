@@ -237,26 +237,96 @@ class NodeJSService {
       return result;
     }
 
-    final paths = ['/config', '/home', '/website/config', '/website/home'];
+    final ts = DateTime.now().millisecondsSinceEpoch;
+
+    final getPaths = <String>[];
+    getPaths.add('/config');
+    getPaths.add('/home');
+    getPaths.add('/category');
+    getPaths.add('/detail');
+    getPaths.add('/search');
+    getPaths.add('/play');
+    getPaths.add('/live');
+    getPaths.add('/website/config');
+    getPaths.add('/website/home');
+    getPaths.add('/website/category');
     if (_spiderApiBase.isNotEmpty) {
-      paths.add('$_spiderApiBase/home');
-      paths.add('$_spiderApiBase/category');
+      getPaths.add('$_spiderApiBase/home');
+      getPaths.add('$_spiderApiBase/category');
+      getPaths.add('$_spiderApiBase/detail');
+      getPaths.add('$_spiderApiBase/search');
     }
     if (_currentSpiderKey.isNotEmpty) {
-      paths.add('/$_currentSpiderKey/$_currentSpiderType/home');
-      paths.add('/$_currentSpiderKey/$_currentSpiderType/category');
+      getPaths.add('/$_currentSpiderKey/$_currentSpiderType/home');
+      getPaths.add('/$_currentSpiderKey/$_currentSpiderType/category');
     }
 
-    for (final path in paths) {
+    final queryParamPaths = <String>[
+      '/?action=home',
+      '/?action=config',
+      '/?do=home',
+      '/?m=home',
+      '/api/home',
+      '/api/config',
+      '/api/v1/home',
+      '/api/v1/config',
+      '/spider/home',
+      '/spider/config',
+    ];
+
+    result['=== GET Requests ==='] = null;
+    for (final path in getPaths) {
       try {
         final url = 'http://127.0.0.1:$_spiderPort$path';
         final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
         result['GET $path'] = {
           'status': response.statusCode,
-          'body': response.body.length > 300 ? response.body.substring(0, 300) : response.body,
+          'body': response.body.length > 200 ? response.body.substring(0, 200) : response.body,
         };
       } catch (e) {
         result['GET $path'] = {'error': e.toString()};
+      }
+    }
+
+    result['=== Query Parameter Paths ==='] = null;
+    for (final path in queryParamPaths) {
+      try {
+        final url = 'http://127.0.0.1:$_spiderPort$path';
+        final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+        result['GET $path'] = {
+          'status': response.statusCode,
+          'body': response.body.length > 200 ? response.body.substring(0, 200) : response.body,
+        };
+      } catch (e) {
+        result['GET $path'] = {'error': e.toString()};
+      }
+    }
+
+    final postTests = <Map<String, dynamic>>[
+      {'path': '/', 'body': {'action': 'home'}},
+      {'path': '/', 'body': {'key': 'home'}},
+      {'path': '/home', 'body': {}},
+      {'path': '/api', 'body': {'type': 'home'}},
+      {'path': '/config', 'body': {'refresh': true}},
+    ];
+
+    result['=== POST Requests ==='] = null;
+    for (final test in postTests) {
+      final path = test['path'] as String;
+      final body = test['body'] as Map<String, dynamic>;
+      try {
+        final url = 'http://127.0.0.1:$_spiderPort$path';
+        final response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        ).timeout(const Duration(seconds: 5));
+        result['POST $path body=$body'] = {
+          'status': response.statusCode,
+          'body': response.body.length > 200 ? response.body.substring(0, 200) : response.body,
+        };
+      } catch (e) {
+        result['POST $path body=$body'] = {'error': e.toString()};
       }
     }
 
