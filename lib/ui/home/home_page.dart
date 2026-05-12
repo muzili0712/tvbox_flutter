@@ -309,7 +309,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
   }
 
   Future<void> _loadContent() async {
-    if (!_hasMore || _isLoading) return;
+    if (!_hasMore) return;
 
     setState(() => _isLoading = true);
 
