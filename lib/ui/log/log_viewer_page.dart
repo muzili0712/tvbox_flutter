@@ -134,36 +134,47 @@ class _LogViewerPageState extends State<LogViewerPage> {
             onPressed: _clearLogs,
           ),
           IconButton(
-            icon: const Icon(Icons.bug_report),
+            icon: const Icon(Icons.bug_report, color: Colors.orange),
             tooltip: '诊断蜘蛛源',
             onPressed: () async {
-              final result = await NodeJSService.instance.diagnoseSpider();
-              final text = const JsonEncoder.withIndent('  ').convert(result);
-              if (mounted) {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('蜘蛛源诊断'),
-                    content: SingleChildScrollView(
-                      child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('正在诊断...'), duration: Duration(seconds: 1)),
+              );
+              try {
+                final result = await NodeJSService.instance.diagnoseSpider();
+                final text = const JsonEncoder.withIndent('  ').convert(result);
+                if (mounted) {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('蜘蛛源诊断结果'),
+                      content: SingleChildScrollView(
+                        child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: text));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('已复制到剪贴板')),
+                            );
+                          },
+                          child: const Text('复制'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('关闭'),
+                        ),
+                      ],
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: text));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已复制到剪贴板')),
-                          );
-                        },
-                        child: const Text('复制'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('关闭'),
-                      ),
-                    ],
-                  ),
-                );
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('诊断失败: $e')),
+                  );
+                }
               }
             },
           ),
@@ -262,35 +273,47 @@ class _LogViewerPageState extends State<LogViewerPage> {
               color: Colors.grey[850],
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.bug_report),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                 label: const Text('诊断蜘蛛源'),
                 onPressed: () async {
-                  final result = await NodeJSService.instance.diagnoseSpider();
-                  final text = const JsonEncoder.withIndent('  ').convert(result);
-                  if (mounted) {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('蜘蛛源诊断'),
-                        content: SingleChildScrollView(
-                          child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('正在诊断...'), duration: Duration(seconds: 1)),
+                  );
+                  try {
+                    final result = await NodeJSService.instance.diagnoseSpider();
+                    final text = const JsonEncoder.withIndent('  ').convert(result);
+                    if (mounted) {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('蜘蛛源诊断结果'),
+                          content: SingleChildScrollView(
+                            child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: text));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('已复制到剪贴板')),
+                                );
+                              },
+                              child: const Text('复制'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('关闭'),
+                            ),
+                          ],
                         ),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: text));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('已复制到剪贴板')),
-                              );
-                            },
-                            child: const Text('复制'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('关闭'),
-                          ),
-                        ],
-                      ),
-                    );
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('诊断失败: $e')),
+                      );
+                    }
                   }
                 },
               ),
