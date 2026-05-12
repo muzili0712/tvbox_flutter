@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/services/log_service.dart';
+import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
+import 'dart:convert';
 
 class LogViewerPage extends StatefulWidget {
   const LogViewerPage({super.key});
@@ -130,6 +132,40 @@ class _LogViewerPageState extends State<LogViewerPage> {
             icon: const Icon(Icons.delete),
             tooltip: '清除日志',
             onPressed: _clearLogs,
+          ),
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            tooltip: '诊断蜘蛛源',
+            onPressed: () async {
+              final result = await NodeJSService.instance.diagnoseSpider();
+              final text = const JsonEncoder.withIndent('  ').convert(result);
+              if (mounted) {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('蜘蛛源诊断'),
+                    content: SingleChildScrollView(
+                      child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: text));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('已复制到剪贴板')),
+                          );
+                        },
+                        child: const Text('复制'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('关闭'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
           ),
         ],
       ),

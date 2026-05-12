@@ -195,17 +195,24 @@ class NodeJSService {
   String getWebsiteUrl() => _websiteUrl;
 
   Future<Map<String, dynamic>> getCatConfig() async {
-    if (_spiderPort <= 0) return {};
+    if (_spiderPort <= 0) {
+      print('[getCatConfig] FAIL: spiderPort=$_spiderPort');
+      return {};
+    }
     try {
+      final url = '${_spiderBaseUrl()}/config';
+      print('[getCatConfig] GET $url');
       final response = await http
-          .get(Uri.parse('${_spiderBaseUrl()}/config'))
+          .get(Uri.parse(url))
           .timeout(const Duration(seconds: 10));
+      print('[getCatConfig] status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final videoSites = data['video']?['sites'] as List<dynamic>? ?? [];
         if (videoSites.isNotEmpty) {
           final firstSite = videoSites.first as Map<String, dynamic>;
           final api = firstSite['api'] as String? ?? '';
+          print('[getCatConfig] firstSite: key=${firstSite['key']}, name=${firstSite['name']}, api=$api');
           if (api.isNotEmpty) {
             _spiderApiBase = api;
           }
@@ -213,21 +220,64 @@ class NodeJSService {
         return data;
       }
     } catch (e) {
-      print('getCatConfig error: $e');
+      print('[getCatConfig] error: $e');
     }
     return {};
   }
 
+  Future<Map<String, dynamic>> diagnoseSpider() async {
+    final result = <String, dynamic>{};
+    result['spiderPort'] = _spiderPort;
+    result['spiderApiBase'] = _spiderApiBase;
+    result['currentSpiderKey'] = _currentSpiderKey;
+    result['currentSpiderType'] = _currentSpiderType;
+
+    if (_spiderPort <= 0) {
+      result['error'] = 'spiderPort is 0';
+      return result;
+    }
+
+    final paths = ['/config', '/home', '/website/config', '/website/home'];
+    if (_spiderApiBase.isNotEmpty) {
+      paths.add('$_spiderApiBase/home');
+      paths.add('$_spiderApiBase/category');
+    }
+    if (_currentSpiderKey.isNotEmpty) {
+      paths.add('/$_currentSpiderKey/$_currentSpiderType/home');
+      paths.add('/$_currentSpiderKey/$_currentSpiderType/category');
+    }
+
+    for (final path in paths) {
+      try {
+        final url = 'http://127.0.0.1:$_spiderPort$path';
+        final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+        result['GET $path'] = {
+          'status': response.statusCode,
+          'body': response.body.length > 300 ? response.body.substring(0, 300) : response.body,
+        };
+      } catch (e) {
+        result['GET $path'] = {'error': e.toString()};
+      }
+    }
+
+    return result;
+  }
+
   Future<Map<String, dynamic>> getHomeContent() async {
-    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
+      print('[getHomeContent] FAIL: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      return {};
+    }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/home';
+      print('[getHomeContent] GET $url');
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      print('[getHomeContent] status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('getHomeContent error: $e');
+      print('[getHomeContent] error: $e');
     }
     return {};
   }
