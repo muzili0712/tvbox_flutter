@@ -68,6 +68,15 @@ class _DriveFileListPageState extends State<DriveFileListPage> {
       
       if (!mounted) return;
       
+      if (playUrl == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法获取播放地址')),
+          );
+        }
+        return;
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
