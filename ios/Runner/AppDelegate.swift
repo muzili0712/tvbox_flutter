@@ -90,7 +90,7 @@ import UIKit
                 }
 
             case "deleteSource":
-                NodeJSManager.shared().deleteSource(withCompletion: { success in
+                NodeJSManager.shared().deleteSource(completion: { success in
                     result(success)
                 })
 
