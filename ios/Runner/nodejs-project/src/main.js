@@ -1,7 +1,6 @@
 const { createServer } = require('http');
 const axios = require('axios');
 const { builtinModules } = require('module');
-const { registerSpider, clearSpiders, spiders, spiderPrefix } = require('./router.js');
 
 builtinModules.forEach(mod => {
     if (!['trace_events'].includes(mod)) {
@@ -13,6 +12,7 @@ let addon = null;
 let sourceModule = null;
 let nativeServerPort = 0;
 let managementPort = 0;
+let spiderPort = 0;
 let isReady = false;
 
 try {
@@ -33,6 +33,7 @@ globalThis.catServerFactory = (handle) => {
     });
     server.on('listening', () => {
         port = server.address().port;
+        spiderPort = port;
         if (nativeServerPort > 0) {
             axios.get(`http://127.0.0.1:${nativeServerPort}/onCatPawOpenPort?port=${port}&type=spider`).catch(() => {});
         }
@@ -47,32 +48,26 @@ globalThis.catServerFactory = (handle) => {
 globalThis.catDartServerPort = () => nativeServerPort;
 
 function loadScript(path) {
-    console.log('=== loadScript called with path:', path);
+    console.log('loadScript called with path:', path);
     const indexJSPath = path + '/index.js';
     const indexConfigJSPath = path + '/index.config.js';
-    console.log('Loading index.js from:', indexJSPath);
-    
+
     try {
         delete require.cache[require.resolve(indexJSPath)];
-    } catch (e) {
-        console.log('No cache to delete for index.js');
-    }
-    
-    try { 
-        delete require.cache[require.resolve(indexConfigJSPath)]; 
-    } catch (e) {
-        console.log('No cache to delete for index.config.js');
-    }
-    
+    } catch (e) {}
+
+    try {
+        delete require.cache[require.resolve(indexConfigJSPath)];
+    } catch (e) {}
+
     try {
         sourceModule = require(indexJSPath);
         console.log('index.js loaded successfully');
     } catch (e) {
-        console.error('ERROR loading index.js:', e);
-        console.error('Stack:', e.stack);
+        console.error('ERROR loading index.js:', e.message);
         throw e;
     }
-    
+
     let config = {};
     try {
         const configModule = require(indexConfigJSPath);
@@ -81,14 +76,15 @@ function loadScript(path) {
     } catch (e) {
         console.log('Config load skipped:', e.message);
     }
-    
+
     try {
-        console.log('Calling sourceModule.start(config)...');
-        sourceModule.start(config);
-        console.log('sourceModule.start(config) completed');
+        const result = sourceModule.start(config);
+        if (result && typeof result.then === 'function') {
+            result.catch(e => console.error('ERROR in sourceModule.start() async:', e.message));
+        }
+        console.log('sourceModule.start(config) initiated');
     } catch (e) {
-        console.error('ERROR in sourceModule.start(config):', e);
-        console.error('Stack:', e.stack);
+        console.error('ERROR in sourceModule.start(config):', e.message);
         throw e;
     }
 }
@@ -98,9 +94,7 @@ function sendMessageToNative(message) {
         try {
             addon.sendMessageToNative(message);
             return;
-        } catch (e) {
-            console.log('addon.sendMessageToNative failed:', e.message);
-        }
+        } catch (e) {}
     }
     if (nativeServerPort > 0) {
         axios.post(`http://127.0.0.1:${nativeServerPort}/onMessage`, { message: message }).catch(() => {});
@@ -117,7 +111,7 @@ function handleNativeMessage(msg) {
                         sourceModule.stop();
                     }
                 } catch (e) {}
-                clearSpiders();
+                spiderPort = 0;
                 loadScript(data.path);
                 break;
             case 'nativeServerPort':
@@ -133,7 +127,6 @@ function handleNativeMessage(msg) {
 
 if (addon && addon.registerCallback) {
     addon.registerCallback((msg) => {
-        console.log('Message from Native:', msg);
         handleNativeMessage(msg);
     });
 }
@@ -161,20 +154,43 @@ const mgmtServer = createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             sourceLoaded: sourceModule !== null,
-            spiderCount: spiders.length,
+            spiderPort: spiderPort,
             ready: isReady,
         }));
         return;
     }
 
-    if (req.method === 'GET' && url.pathname === '/source/list') {
-        const sourceList = spiders.map(s => ({
-            key: s.meta.key,
-            name: s.meta.name,
-            type: s.meta.type,
-        }));
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ sources: sourceList }));
+    if (req.method === 'POST' && url.pathname === '/source/loadPath') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                const sourcePath = data.path;
+
+                if (!sourcePath) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'path is required' }));
+                    return;
+                }
+
+                try {
+                    if (sourceModule && typeof sourceModule.stop === 'function') {
+                        sourceModule.stop();
+                    }
+                } catch (e) {}
+
+                spiderPort = 0;
+                loadScript(sourcePath);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: 'Source loaded from path' }));
+            } catch (e) {
+                console.error('ERROR in /source/loadPath:', e.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
         return;
     }
 
@@ -189,53 +205,6 @@ const mgmtServer = createServer((req, res) => {
                 res.end(JSON.stringify({ success: true }));
             } catch (e) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: e.message }));
-            }
-        });
-        return;
-    }
-
-    if (req.method === 'POST' && url.pathname === '/source/loadPath') {
-        console.log('=== /source/loadPath endpoint called ===');
-        let body = '';
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', () => {
-            try {
-                console.log('Request body:', body);
-                const data = JSON.parse(body);
-                const sourcePath = data.path;
-                console.log('sourcePath:', sourcePath);
-                
-                if (!sourcePath) {
-                    console.log('ERROR: path is required');
-                    res.writeHead(400, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'path is required' }));
-                    return;
-                }
-                
-                try {
-                    if (sourceModule && typeof sourceModule.stop === 'function') {
-                        console.log('Stopping existing sourceModule');
-                        sourceModule.stop();
-                    }
-                } catch (e) {
-                    console.log('Error stopping sourceModule (non-fatal):', e.message);
-                }
-                
-                console.log('Clearing spiders');
-                clearSpiders();
-                
-                console.log('Calling loadScript');
-                loadScript(sourcePath);
-                
-                console.log('=== Success! Returning 200 ===');
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true, message: 'Source loaded from path' }));
-            } catch (e) {
-                console.error('=== ERROR in /source/loadPath ===');
-                console.error('Error:', e);
-                console.error('Stack:', e.stack);
-                res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: e.message }));
             }
         });

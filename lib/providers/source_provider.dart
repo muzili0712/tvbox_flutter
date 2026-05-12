@@ -165,7 +165,8 @@ class SourceProvider extends ChangeNotifier {
         final key =
             (firstSite['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
         final type = firstSite['type'] as int? ?? 3;
-        nodejs.setCurrentSpider(key, type);
+        final api = firstSite['api'] as String? ?? '';
+        nodejs.setCurrentSpider(key, type, apiBase: api);
       }
 
       final homeResult = await nodejs.getHomeContent();
@@ -199,6 +200,7 @@ class SourceProvider extends ChangeNotifier {
             (site['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
         final name = site['name'] as String? ?? '';
         final type = site['type'] as int? ?? 3;
+        final api = site['api'] as String? ?? '';
 
         if (key.isNotEmpty && name.isNotEmpty) {
           final exists = _sources.any((s) => s.spiderKey == key);

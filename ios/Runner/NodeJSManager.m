@@ -75,6 +75,10 @@
                 int nativePort = self.nativeServerPort;
                 NSLog(@"Starting Node.js with script: %@, native-port: %d", scriptPath, nativePort);
 
+                NSString *sourcePath = [self getDocumentsSourcePath];
+                const char *nodePathC = [sourcePath UTF8String];
+                setenv("NODE_PATH", nodePathC, 1);
+
                 NSMutableArray *args = [NSMutableArray arrayWithObjects:@"node", scriptPath, nil];
                 if (nativePort > 0) {
                     [args addObject:@"--native-port"];

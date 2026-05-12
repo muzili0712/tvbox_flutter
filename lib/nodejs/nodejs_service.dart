@@ -20,6 +20,7 @@ class NodeJSService {
   int _nativeServerPort = 0;
   String _currentSpiderKey = '';
   int _currentSpiderType = 3;
+  String _spiderApiBase = '';
   String _websiteUrl = '';
   Completer<void>? _readyCompleter;
   Completer<void>? _managementPortCompleter;
@@ -33,7 +34,10 @@ class NodeJSService {
   bool get hasSpiderServer => _spiderPort > 0;
 
   String _spiderBaseUrl() => 'http://127.0.0.1:$_spiderPort';
-  String _spiderPath() => '/$_currentSpiderKey/$_currentSpiderType';
+  String _spiderPath() {
+    if (_spiderApiBase.isNotEmpty) return _spiderApiBase;
+    return '/$_currentSpiderKey/$_currentSpiderType';
+  }
 
   void _setupEventListener() {
     _eventSubscription?.cancel();
@@ -157,6 +161,7 @@ class NodeJSService {
     try {
       final result = await _channel.invokeMethod('deleteSource');
       _spiderPort = 0;
+      _spiderApiBase = '';
       return result == true;
     } catch (e) {
       print('deleteSource error: $e');
@@ -174,9 +179,10 @@ class NodeJSService {
     }
   }
 
-  void setCurrentSpider(String key, int type) {
+  void setCurrentSpider(String key, int type, {String apiBase = ''}) {
     _currentSpiderKey = key;
     _currentSpiderType = type;
+    _spiderApiBase = apiBase;
   }
 
   String get currentSpiderKey => _currentSpiderKey;
@@ -195,7 +201,16 @@ class NodeJSService {
           .get(Uri.parse('${_spiderBaseUrl()}/config'))
           .timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final videoSites = data['video']?['sites'] as List<dynamic>? ?? [];
+        if (videoSites.isNotEmpty) {
+          final firstSite = videoSites.first as Map<String, dynamic>;
+          final api = firstSite['api'] as String? ?? '';
+          if (api.isNotEmpty) {
+            _spiderApiBase = api;
+          }
+        }
+        return data;
       }
     } catch (e) {
       print('getCatConfig error: $e');
@@ -404,6 +419,7 @@ class NodeJSService {
     _managementPort = 0;
     _spiderPort = 0;
     _nativeServerPort = 0;
+    _spiderApiBase = '';
     _eventSubscription?.cancel();
   }
 }
