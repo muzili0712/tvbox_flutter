@@ -14,16 +14,15 @@ import UIKit
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        let flutterViewController = FlutterViewController()
+        window = UIWindow(frame: UIScreen.main.bounds)
+        window?.rootViewController = flutterViewController
+        window?.makeKeyAndVisible()
+
         GeneratedPluginRegistrant.register(with: self)
-        
-        let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
-        guard let controller = window?.rootViewController as? FlutterViewController else {
-            return result
-        }
-
-        setupNodeJSChannel(with: controller)
-        setupEventChannel(with: controller)
+        setupNodeJSChannel(with: flutterViewController)
+        setupEventChannel(with: flutterViewController)
 
         NotificationCenter.default.addObserver(
             self,
@@ -46,7 +45,7 @@ import UIKit
             object: nil
         )
 
-        return result
+        return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
 
     private func setupNodeJSChannel(with controller: FlutterViewController?) {
