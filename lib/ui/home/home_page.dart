@@ -274,18 +274,24 @@ class _HomeContentState extends State<HomeContent>
 
   Widget _buildCategoryContent(Map<String, dynamic> category) {
     final typeId = category['type_id']?.toString() ?? '';
+    final siteKey = Provider.of<SourceProvider>(context).currentSite?['key'] ?? '';
     return _CategoryContentLoader(
         typeId: typeId,
-        typeName: category['type_name'] ?? '');
+        typeName: category['type_name'] ?? '',
+        siteKey: siteKey);
   }
 }
 
 class _CategoryContentLoader extends StatefulWidget {
   final String typeId;
   final String typeName;
+  final String siteKey;
 
-  const _CategoryContentLoader(
-      {required this.typeId, required this.typeName});
+  const _CategoryContentLoader({
+    required this.typeId,
+    required this.typeName,
+    required this.siteKey,
+  });
 
   @override
   State<_CategoryContentLoader> createState() =>
@@ -298,6 +304,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
   bool _isLoading = true;
   int _currentPage = 1;
   bool _hasMore = true;
+  String _lastSiteKey = '';
 
   @override
   bool get wantKeepAlive => true;
@@ -305,7 +312,20 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
   @override
   void initState() {
     super.initState();
+    _lastSiteKey = widget.siteKey;
     _loadContent();
+  }
+
+  @override
+  void didUpdateWidget(_CategoryContentLoader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.siteKey != _lastSiteKey) {
+      _lastSiteKey = widget.siteKey;
+      _currentPage = 1;
+      _hasMore = true;
+      _videos = [];
+      _loadContent();
+    }
   }
 
   Future<void> _loadContent() async {
