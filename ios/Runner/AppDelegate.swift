@@ -14,23 +14,7 @@ import UIKit
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        var controller: FlutterViewController? = window?.rootViewController as? FlutterViewController
-
-        if controller == nil {
-            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let sceneDelegate = scene.delegate as? SceneDelegate,
-               let window = sceneDelegate.window {
-                controller = window.rootViewController as? FlutterViewController
-            }
-        }
-
-        if controller == nil {
-            controller = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .flatMap({ $0.windows })
-                .compactMap({ $0.rootViewController as? FlutterViewController })
-                .first
-        }
+        let controller = window?.rootViewController as? FlutterViewController
 
         setupNodeJSChannel(with: controller)
         setupEventChannel(with: controller)
