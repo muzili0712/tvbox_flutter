@@ -338,8 +338,12 @@ class NodeJSService {
     }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/home';
-      print('[getHomeContent] GET $url');
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      print('[getHomeContent] POST $url');
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({}),
+      ).timeout(const Duration(seconds: 15));
       print('[getHomeContent] status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
@@ -356,8 +360,16 @@ class NodeJSService {
   }) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
-      final url = '${_spiderBaseUrl()}${_spiderPath()}/category?t=${DateTime.now().millisecondsSinceEpoch}&cateId=$categoryId&page=$page';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/category';
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'id': categoryId,
+          'page': page,
+          'filters': {},
+        }),
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
@@ -370,8 +382,12 @@ class NodeJSService {
   Future<Map<String, dynamic>> getVideoDetail({required String videoId}) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
-      final url = '${_spiderBaseUrl()}${_spiderPath()}/detail?id=$videoId';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/detail';
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'id': videoId}),
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
@@ -388,8 +404,15 @@ class NodeJSService {
   }) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
-      final url = '${_spiderBaseUrl()}${_spiderPath()}/play?flag=$flag&id=$videoId&playId=${Uri.encodeComponent(playId)}';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/play';
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'flag': flag,
+          'id': playId,
+        }),
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
@@ -411,8 +434,15 @@ class NodeJSService {
   Future<Map<String, dynamic>> search({required String keyword, int page = 1}) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
-      final url = '${_spiderBaseUrl()}${_spiderPath()}/search?wd=${Uri.encodeComponent(keyword)}&page=$page';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/search';
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'wd': keyword,
+          'page': page,
+        }),
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
@@ -426,7 +456,11 @@ class NodeJSService {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return [];
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/live';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({}),
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data is List) {
@@ -442,8 +476,12 @@ class NodeJSService {
   Future<String?> getLivePlayUrl(String channelId) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return null;
     try {
-      final url = '${_spiderBaseUrl()}${_spiderPath()}/live/play?id=${Uri.encodeComponent(channelId)}';
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/live/play';
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'id': channelId}),
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         return data['url'] as String?;
