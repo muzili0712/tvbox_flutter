@@ -301,14 +301,14 @@ class NodeJSService {
     }
 
     final postTests = <Map<String, dynamic>>[
-      {'path': '/', 'body': <String, dynamic>{'action': 'home'}},
-      {'path': '/', 'body': <String, dynamic>{'key': 'home'}},
       {'path': '/home', 'body': <String, dynamic>{}},
-      {'path': '/api', 'body': <String, dynamic>{'type': 'home'}},
-      {'path': '/config', 'body': <String, dynamic>{'refresh': true}},
+      {'path': '/category', 'body': <String, dynamic>{'id': 'test', 'page': 1}},
+      {'path': '/detail', 'body': <String, dynamic>{'id': 'test'}},
+      {'path': '/search', 'body': <String, dynamic>{'wd': 'test', 'page': 1}},
+      {'path': '/play', 'body': <String, dynamic>{'flag': 'test', 'id': 'test'}},
     ];
 
-    result['=== POST Requests ==='] = null;
+    result['=== POST Requests (root) ==='] = null;
     for (final test in postTests) {
       final path = test['path'] as String;
       final body = test['body'] as Map<String, dynamic>;
@@ -325,6 +325,29 @@ class NodeJSService {
         };
       } catch (e) {
         result['POST $path'] = <String, dynamic>{'error': e.toString()};
+      }
+    }
+
+    if (_spiderApiBase.isNotEmpty) {
+      result['=== POST Requests (with prefix) ==='] = null;
+      for (final test in postTests) {
+        final path = test['path'] as String;
+        final body = test['body'] as Map<String, dynamic>;
+        final fullPath = '$_spiderApiBase$path';
+        try {
+          final url = 'http://127.0.0.1:$_spiderPort$fullPath';
+          final response = await http.post(
+            Uri.parse(url),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          ).timeout(const Duration(seconds: 5));
+          result['POST $fullPath'] = <String, dynamic>{
+            'status': response.statusCode,
+            'body': response.body.length > 200 ? response.body.substring(0, 200) : response.body,
+          };
+        } catch (e) {
+          result['POST $fullPath'] = <String, dynamic>{'error': e.toString()};
+        }
       }
     }
 
