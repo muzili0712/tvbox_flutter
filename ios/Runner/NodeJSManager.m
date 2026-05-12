@@ -343,10 +343,6 @@
     });
 }
 
-- (void)loadSource:(NSString *)urlString completion:(void (^)(BOOL, NSString * _Nullable))completion {
-    [self loadSourceFromURL:urlString completion:completion];
-}
-
 - (void)sendLoadCommandToNodeJS:(NSString *)path completion:(void (^)(BOOL, NSString * _Nullable))completion {
     [self sendLoadCommandToNodeJS:path retryCount:3 completion:completion];
 }

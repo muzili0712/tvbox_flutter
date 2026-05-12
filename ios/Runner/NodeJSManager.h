@@ -19,9 +19,6 @@
 - (void)loadSourceFromURL:(NSString *)urlString
                completion:(void (^)(BOOL success, NSString * _Nullable message))completion;
 
-- (void)loadSource:(NSString *)urlString
-        completion:(void (^)(BOOL success, NSString * _Nullable message))completion;
-
 - (void)deleteSourceWithCompletion:(void (^)(BOOL success))completion;
 
 - (NSString *)getDocumentsSourcePath;
