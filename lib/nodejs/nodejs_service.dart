@@ -239,6 +239,8 @@ class NodeJSService {
 
     final getPaths = <String>[];
     getPaths.add('/config');
+    getPaths.add('/check');
+    getPaths.add('/init');
     getPaths.add('/home');
     getPaths.add('/category');
     getPaths.add('/detail');
@@ -253,6 +255,7 @@ class NodeJSService {
       getPaths.add('$_spiderApiBase/category');
       getPaths.add('$_spiderApiBase/detail');
       getPaths.add('$_spiderApiBase/search');
+      getPaths.add('$_spiderApiBase/init');
     }
     if (_currentSpiderKey.isNotEmpty) {
       getPaths.add('/$_currentSpiderKey/$_currentSpiderType/home');
@@ -302,6 +305,7 @@ class NodeJSService {
 
     final postTests = <Map<String, dynamic>>[
       {'path': '/home', 'body': <String, dynamic>{}},
+      {'path': '/init', 'body': <String, dynamic>{}},
       {'path': '/category', 'body': <String, dynamic>{'id': 'test', 'page': 1}},
       {'path': '/detail', 'body': <String, dynamic>{'id': 'test'}},
       {'path': '/search', 'body': <String, dynamic>{'wd': 'test', 'page': 1}},
