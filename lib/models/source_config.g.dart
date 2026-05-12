@@ -13,7 +13,7 @@ SourceConfig _$SourceConfigFromJson(Map<String, dynamic> json) => SourceConfig(
       isEnabled: json['isEnabled'] as bool? ?? true,
       spiderKey: json['spiderKey'] as String?,
       spiderType: json['spiderType'] as int?,
-      sourceType: json['sourceType'] as String? ?? 'catpawopen',
+      sourceType: json['sourceType'] as String? ?? 'remote',
     );
 
 Map<String, dynamic> _$SourceConfigToJson(SourceConfig instance) =>

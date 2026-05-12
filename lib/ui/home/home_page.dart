@@ -26,16 +26,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
-  late TabController _tabController;
-  bool _isLoading = true;
-
-  List<Widget>? _pages;
 
   Widget _getPage(int index) {
-    if (_pages == null) {
-      _pages = List.filled(5, const SizedBox.shrink());
-    }
-
     switch (index) {
       case 0:
         return const HomeContent();
@@ -50,35 +42,6 @@ class _HomePageState extends State<HomePage>
       default:
         return const SizedBox.shrink();
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 0, vsync: this);
-    _loadHomeData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadHomeData() async {
-    setState(() => _isLoading = true);
-
-    final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
-    await sourceProvider.loadHomeContent();
-
-    if (sourceProvider.categories.isNotEmpty) {
-      _tabController = TabController(
-        length: sourceProvider.categories.length,
-        vsync: this,
-      );
-    }
-
-    setState(() => _isLoading = false);
   }
 
   void _onItemTapped(int index) {
@@ -144,6 +107,61 @@ class _HomeContentState extends State<HomeContent>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: Consumer<SourceProvider>(
+          builder: (context, provider, _) {
+            if (provider.sites.length > 1) {
+              return PopupMenuButton<Map<String, dynamic>>(
+                icon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.swap_horiz, size: 20),
+                    Flexible(
+                      child: Text(
+                        provider.currentSite?['name'] ?? '',
+                        style: TextStyle(fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                onSelected: (site) {
+                  provider.setCurrentSite(site).then((_) {
+                    if (provider.categories.isNotEmpty) {
+                      setState(() {
+                        _tabController = TabController(
+                          length: provider.categories.length,
+                          vsync: this,
+                        );
+                      });
+                    }
+                  });
+                },
+                itemBuilder: (context) => provider.sites.map((site) {
+                  final key = site['key'] as String? ?? '';
+                  final name = site['name'] as String? ?? key;
+                  final isCurrent = provider.currentSite?['key'] == key;
+                  return PopupMenuItem<Map<String, dynamic>>(
+                    value: site,
+                    child: Row(
+                      children: [
+                        Icon(
+                          isCurrent
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          color: isCurrent ? Colors.green : null,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(name)),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
         title: const Text('TVBox'),
         actions: [
           IconButton(

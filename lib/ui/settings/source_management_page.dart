@@ -23,128 +23,92 @@ class _SourceManagementPageState extends State<SourceManagementPage> {
   }
 
   void _showAddDialog() {
-    String sourceType = 'remote';
     _nameController.clear();
     _urlController.clear();
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('添加数据源'),
-          content: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'remote', label: Text('远程源')),
-                    ButtonSegment(value: 'catpawopen', label: Text('内置')),
-                  ],
-                  selected: {sourceType},
-                  onSelectionChanged: (v) {
-                    setDialogState(() => sourceType = v.first);
-                  },
+      builder: (context) => AlertDialog(
+        title: const Text('添加数据源'),
+        content: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? '请输入数据源名称' : null,
+                decoration: const InputDecoration(
+                  labelText: '数据源名称',
+                  hintText: '例如：我的影院',
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _nameController,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? '请输入数据源名称' : null,
-                  decoration: const InputDecoration(
-                    labelText: '数据源名称',
-                    hintText: '例如：我的影院',
-                  ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _urlController,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return '请输入源地址';
+                  final uri = Uri.tryParse(v.trim());
+                  if (uri == null || !uri.hasScheme) return '请输入有效的URL';
+                  if (!v.trim().endsWith('.js') && !v.trim().endsWith('.js.md5')) return '源地址应以.js结尾';
+                  return null;
+                },
+                decoration: const InputDecoration(
+                  labelText: '源地址',
+                  hintText: 'https://example.com/cat/index.js',
                 ),
-                const SizedBox(height: 8),
-                if (sourceType == 'remote')
-                  TextFormField(
-                    controller: _urlController,
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) return '请输入源地址';
-                      final uri = Uri.tryParse(v.trim());
-                      if (uri == null || !uri.hasScheme) return '请输入有效的URL';
-                      if (!v.trim().endsWith('.js') && !v.trim().endsWith('.js.md5')) return '源地址应以.js结尾';
-                      return null;
-                    },
-                    decoration: const InputDecoration(
-                      labelText: '源地址',
-                      hintText: 'https://example.com/cat/index.js',
-                    ),
-                    keyboardType: TextInputType.url,
-                  ),
-                if (sourceType == 'catpawopen')
-                  TextFormField(
-                    controller: _urlController,
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? '请输入Spider Key' : null,
-                    decoration: const InputDecoration(
-                      labelText: 'Spider Key',
-                      hintText: '例如：kunyu77',
-                    ),
-                  ),
-              ],
-            ),
+                keyboardType: TextInputType.url,
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            Consumer<SourceProvider>(
-              builder: (context, provider, _) {
-                return TextButton(
-                  onPressed: provider.isLoading
-                      ? null
-                      : () async {
-                          if (!_formKey.currentState!.validate()) return;
-
-                          final name = _nameController.text.trim();
-                          final url = _urlController.text.trim();
-                          final id =
-                              DateTime.now().millisecondsSinceEpoch.toString();
-
-                          SourceConfig source;
-                          if (sourceType == 'remote') {
-                            source =
-                                SourceConfig.remote(id: id, name: name, url: url);
-                          } else {
-                            source = SourceConfig.catPawOpen(
-                              id: id,
-                              name: name,
-                              spiderKey: url,
-                              spiderType: 3,
-                            );
-                          }
-
-                          Navigator.pop(context);
-
-                          final success = await provider.addSource(source);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(success
-                                    ? '添加成功'
-                                    : (provider.errorMessage ?? '添加失败')),
-                                backgroundColor:
-                                    success ? Colors.green : Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                  child: provider.isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('添加'),
-                );
-              },
-            ),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          Consumer<SourceProvider>(
+            builder: (context, provider, _) {
+              return TextButton(
+                onPressed: provider.isLoading
+                    ? null
+                    : () async {
+                        if (!_formKey.currentState!.validate()) return;
+
+                        final name = _nameController.text.trim();
+                        final url = _urlController.text.trim();
+                        final id =
+                            DateTime.now().millisecondsSinceEpoch.toString();
+
+                        final source = SourceConfig.remote(id: id, name: name, url: url);
+
+                        Navigator.pop(context);
+
+                        final success = await provider.addSource(source);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(success
+                                  ? '添加成功'
+                                  : (provider.errorMessage ?? '添加失败')),
+                              backgroundColor:
+                                  success ? Colors.green : Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                child: provider.isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('添加'),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -207,18 +171,6 @@ class _SourceManagementPageState extends State<SourceManagementPage> {
                     final source = provider.sources[index];
                     final isCurrent = provider.currentSource?.id == source.id;
 
-                    String typeLabel;
-                    switch (source.sourceType) {
-                      case 'remote':
-                        typeLabel = '远程';
-                        break;
-                      case 'catpawopen':
-                        typeLabel = '内置';
-                        break;
-                      default:
-                        typeLabel = '未知';
-                    }
-
                     return ListTile(
                       leading: Icon(
                         isCurrent
@@ -227,7 +179,7 @@ class _SourceManagementPageState extends State<SourceManagementPage> {
                         color: isCurrent ? Colors.green : null,
                       ),
                       title: Text(source.name),
-                      subtitle: Text('[$typeLabel] ${source.url}'),
+                      subtitle: Text(source.url),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
                         onPressed: () async {

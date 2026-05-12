@@ -19,7 +19,7 @@ class SourceConfig {
     this.isEnabled = true,
     this.spiderKey,
     this.spiderType,
-    this.sourceType = 'catpawopen',
+    this.sourceType = 'remote',
   });
 
   factory SourceConfig.empty() {
@@ -28,7 +28,7 @@ class SourceConfig {
       name: '',
       url: '',
       isEnabled: false,
-      sourceType: 'catpawopen',
+      sourceType: 'remote',
     );
   }
 

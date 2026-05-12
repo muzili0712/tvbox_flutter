@@ -219,7 +219,7 @@ class NodeJSService {
   }
 
   Future<Map<String, dynamic>> getHomeContent() async {
-    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/home';
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
@@ -236,7 +236,7 @@ class NodeJSService {
     required String categoryId,
     int page = 1,
   }) async {
-    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/category?t=${DateTime.now().millisecondsSinceEpoch}&cateId=$categoryId&page=$page';
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
@@ -250,7 +250,7 @@ class NodeJSService {
   }
 
   Future<Map<String, dynamic>> getVideoDetail({required String videoId}) async {
-    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/detail?id=$videoId';
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
@@ -268,7 +268,7 @@ class NodeJSService {
     required String flag,
     required String playId,
   }) async {
-    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/play?flag=$flag&id=$videoId&playId=${Uri.encodeComponent(playId)}';
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
@@ -291,7 +291,7 @@ class NodeJSService {
   }
 
   Future<Map<String, dynamic>> search({required String keyword, int page = 1}) async {
-    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/search?wd=${Uri.encodeComponent(keyword)}&page=$page';
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
@@ -305,7 +305,7 @@ class NodeJSService {
   }
 
   Future<List<Map<String, dynamic>>> getLiveChannels() async {
-    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return [];
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return [];
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/live';
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
@@ -322,7 +322,7 @@ class NodeJSService {
   }
 
   Future<String?> getLivePlayUrl(String channelId) async {
-    if (_spiderPort <= 0 || _currentSpiderKey.isEmpty) return null;
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return null;
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/live/play?id=${Uri.encodeComponent(channelId)}';
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));

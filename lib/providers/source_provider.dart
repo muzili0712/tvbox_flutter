@@ -8,12 +8,16 @@ import 'dart:convert';
 class SourceProvider extends ChangeNotifier {
   List<SourceConfig> _sources = [];
   SourceConfig? _currentSource;
+  List<Map<String, dynamic>> _sites = [];
+  Map<String, dynamic>? _currentSite;
   List<dynamic> _categories = [];
   bool _isLoading = false;
   String? _errorMessage;
 
   List<SourceConfig> get sources => _sources;
   SourceConfig? get currentSource => _currentSource;
+  List<Map<String, dynamic>> get sites => _sites;
+  Map<String, dynamic>? get currentSite => _currentSite;
   List<dynamic> get categories => _categories;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -89,7 +93,6 @@ class SourceProvider extends ChangeNotifier {
       await _saveCurrentSource();
 
       if (nodejs.hasSpiderServer) {
-        await loadCatConfig();
         await loadHomeContent();
       }
     } catch (e) {
@@ -116,6 +119,8 @@ class SourceProvider extends ChangeNotifier {
       } else {
         _currentSource = null;
         await _saveCurrentSource();
+        _sites = [];
+        _currentSite = null;
         _categories = [];
         await NodeJSService.instance.deleteSource();
       }
@@ -127,8 +132,33 @@ class SourceProvider extends ChangeNotifier {
   Future<void> setCurrentSource(SourceConfig source) async {
     _currentSource = source;
     await _saveCurrentSource();
-    await loadHomeContent();
+
+    if (source.sourceType == 'remote') {
+      final nodejs = NodeJSService.instance;
+      if (!nodejs.hasSpiderServer) {
+        _isLoading = true;
+        notifyListeners();
+        final success = await nodejs.loadSourceFromURL(source.url);
+        if (success) {
+          await loadHomeContent();
+        }
+        _isLoading = false;
+      } else {
+        await loadHomeContent();
+      }
+    }
+
     notifyListeners();
+  }
+
+  Future<void> setCurrentSite(Map<String, dynamic> site) async {
+    _currentSite = site;
+    final key =
+        (site['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
+    final type = site['type'] as int? ?? 3;
+    final api = site['api'] as String? ?? '';
+    NodeJSService.instance.setCurrentSpider(key, type, apiBase: api);
+    await loadHomeContent();
   }
 
   Future<void> _saveSources() async {
@@ -160,12 +190,19 @@ class SourceProvider extends ChangeNotifier {
 
       final videoSites =
           result['video']?['sites'] as List<dynamic>? ?? [];
+
       if (videoSites.isNotEmpty) {
-        final firstSite = videoSites.first as Map<String, dynamic>;
+        _sites = videoSites.cast<Map<String, dynamic>>();
+
+        if (_currentSite == null ||
+            !_sites.any((s) => s['key'] == _currentSite?['key'])) {
+          _currentSite = _sites.first;
+        }
+
         final key =
-            (firstSite['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
-        final type = firstSite['type'] as int? ?? 3;
-        final api = firstSite['api'] as String? ?? '';
+            (_currentSite!['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
+        final type = _currentSite!['type'] as int? ?? 3;
+        final api = _currentSite!['api'] as String? ?? '';
         nodejs.setCurrentSpider(key, type, apiBase: api);
       }
 
@@ -185,44 +222,6 @@ class SourceProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadCatConfig() async {
-    try {
-      final nodejs = NodeJSService.instance;
-      if (!nodejs.hasSpiderServer) return;
-
-      final config = await nodejs.getCatConfig();
-      if (config.isEmpty) return;
-
-      final videoSites =
-          config['video']?['sites'] as List<dynamic>? ?? [];
-      for (final site in videoSites) {
-        final key =
-            (site['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
-        final name = site['name'] as String? ?? '';
-        final type = site['type'] as int? ?? 3;
-        final api = site['api'] as String? ?? '';
-
-        if (key.isNotEmpty && name.isNotEmpty) {
-          final exists = _sources.any((s) => s.spiderKey == key);
-          if (!exists) {
-            final source = SourceConfig.catPawOpen(
-              id: 'catpaw_$key',
-              name: name,
-              spiderKey: key,
-              spiderType: type,
-            );
-            _sources.add(source);
-          }
-        }
-      }
-
-      await _saveSources();
-      notifyListeners();
-    } catch (e) {
-      print('Failed to load cat config: $e');
-    }
-  }
-
   Future<void> activateCurrentSource() async {
     if (_currentSource == null) return;
     final nodejs = NodeJSService.instance;
@@ -233,7 +232,6 @@ class SourceProvider extends ChangeNotifier {
 
       final success = await nodejs.loadSourceFromURL(_currentSource!.url);
       if (success) {
-        await loadCatConfig();
         await loadHomeContent();
       }
 
