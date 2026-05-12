@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
 import 'package:tvbox_flutter/providers/player_provider.dart';
 import 'package:tvbox_flutter/models/video_detail.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
@@ -36,6 +37,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   bool _isPlaying = false;
   late int _currentEpisodeIndex;
   late int _currentSourceIndex;
+  String _resolvedPlayUrl = '';
 
   @override
   void initState() {
@@ -48,6 +50,25 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
 
   Future<void> _loadVideo() async {
     setState(() => _isLoading = true);
+    
+    _resolvedPlayUrl = widget.playUrl;
+    
+    if (widget.playUrl.contains('127.0.0.1') && widget.playUrl.contains('proxy')) {
+      try {
+        print('[VideoPlayer] Detected proxy URL, fetching actual stream...');
+        final response = await http.get(Uri.parse(widget.playUrl)).timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) {
+          final body = response.body.trim();
+          if (body.startsWith('http') && (body.contains('.m3u8') || body.contains('.mp4'))) {
+            _resolvedPlayUrl = body;
+            print('[VideoPlayer] Got actual stream URL: ${_resolvedPlayUrl.substring(0, 100)}...');
+          }
+        }
+      } catch (e) {
+        print('[VideoPlayer] Proxy fetch error: $e');
+      }
+    }
+    
     await Future.delayed(const Duration(milliseconds: 500));
     setState(() => _isLoading = false);
   }
@@ -149,10 +170,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   Widget _buildPlayer() {
+    final playUrl = _resolvedPlayUrl.isNotEmpty ? _resolvedPlayUrl : widget.playUrl;
     switch (_currentPlayer) {
       case PlayerType.vlc:
         return VlcPlayerWidget(
-          url: widget.playUrl,
+          url: playUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
               _isPlaying = isPlaying;
@@ -164,7 +186,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         );
       case PlayerType.system:
         return SystemPlayerWidget(
-          url: widget.playUrl,
+          url: playUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
               _isPlaying = isPlaying;
