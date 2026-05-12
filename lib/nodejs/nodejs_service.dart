@@ -371,6 +371,102 @@ class NodeJSService {
           result['POST $fullPath'] = <String, dynamic>{'error': e.toString()};
         }
       }
+      
+      // 测试完整流程：搜索 -> 详情 -> 播放
+      result['=== Full Workflow Test ==='] = null;
+      try {
+        final fullBase = '$_spiderApiBase';
+        
+        // 1. 初始化
+        final initUrl = 'http://127.0.0.1:$_spiderPort$fullBase/init';
+        await http.post(
+          Uri.parse(initUrl),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({}),
+        ).timeout(const Duration(seconds: 5));
+        
+        // 2. 搜索
+        final searchUrl = 'http://127.0.0.1:$_spiderPort$fullBase/search';
+        final searchResp = await http.post(
+          Uri.parse(searchUrl),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'wd': '电影', 'page': 1}),
+        ).timeout(const Duration(seconds: 5));
+        result['[Step1] Search'] = {
+          'status': searchResp.statusCode,
+          'body': searchResp.body.length > 300 ? searchResp.body.substring(0, 300) : searchResp.body,
+        };
+        
+        if (searchResp.statusCode == 200) {
+          final searchData = jsonDecode(searchResp.body);
+          final list = searchData['list'] as List? ?? [];
+          
+          if (list.isNotEmpty) {
+            final vodId = list[0]['vod_id']?.toString() ?? '';
+            result['[Step1a] Got vod_id'] = vodId;
+            
+            // 3. 获取详情
+            final detailUrl = 'http://127.0.0.1:$_spiderPort$fullBase/detail';
+            final detailResp = await http.post(
+              Uri.parse(detailUrl),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'id': vodId}),
+            ).timeout(const Duration(seconds: 5));
+            result['[Step2] Detail'] = {
+              'status': detailResp.statusCode,
+              'body': detailResp.body.length > 500 ? detailResp.body.substring(0, 500) : detailResp.body,
+            };
+            
+            if (detailResp.statusCode == 200) {
+              final detailData = jsonDecode(detailResp.body);
+              final detailList = detailData['list'] as List? ?? [];
+              
+              if (detailList.isNotEmpty) {
+                final vod = detailList[0];
+                final vodPlayFrom = vod['vod_play_from']?.toString() ?? '';
+                final vodPlayUrl = vod['vod_play_url']?.toString() ?? '';
+                
+                result['[Step2a] vod_play_from'] = vodPlayFrom;
+                result['[Step2b] vod_play_url'] = vodPlayUrl.length > 200 ? '${vodPlayUrl.substring(0, 200)}...' : vodPlayUrl;
+                
+                // 4. 获取播放地址
+                if (vodPlayFrom.isNotEmpty && vodPlayUrl.isNotEmpty) {
+                  final froms = vodPlayFrom.split('\$\$\$');
+                  final urls = vodPlayUrl.split('\$\$\$');
+                  
+                  if (froms.isNotEmpty && urls.isNotEmpty) {
+                    final flag = froms[0];
+                    final firstSource = urls[0].split('#')[0];
+                    final parts = firstSource.split('\$');
+                    
+                    String? playId;
+                    if (parts.length >= 2) {
+                      playId = parts[1];
+                    } else {
+                      playId = firstSource;
+                    }
+                    
+                    result['[Step3] Play Input'] = {'flag': flag, 'id': playId};
+                    
+                    final playUrl = 'http://127.0.0.1:$_spiderPort$fullBase/play';
+                    final playResp = await http.post(
+                      Uri.parse(playUrl),
+                      headers: {'Content-Type': 'application/json'},
+                      body: jsonEncode({'flag': flag, 'id': playId}),
+                    ).timeout(const Duration(seconds: 5));
+                    result['[Step3] Play Response'] = {
+                      'status': playResp.statusCode,
+                      'body': playResp.body.length > 200 ? playResp.body.substring(0, 200) : playResp.body,
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e, stackTrace) {
+        result['Workflow Test Error'] = {'error': e.toString(), 'stack': stackTrace.toString()};
+      }
     }
 
     return Map<String, dynamic>.from(result);
