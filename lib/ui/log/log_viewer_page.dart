@@ -256,6 +256,45 @@ class _LogViewerPageState extends State<LogViewerPage> {
                 ],
               ),
             ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              color: Colors.grey[850],
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.bug_report),
+                label: const Text('诊断蜘蛛源'),
+                onPressed: () async {
+                  final result = await NodeJSService.instance.diagnoseSpider();
+                  final text = const JsonEncoder.withIndent('  ').convert(result);
+                  if (mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('蜘蛛源诊断'),
+                        content: SingleChildScrollView(
+                          child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: text));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('已复制到剪贴板')),
+                              );
+                            },
+                            child: const Text('复制'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('关闭'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+              ),
+            ),
           ],
         ),
       ),
