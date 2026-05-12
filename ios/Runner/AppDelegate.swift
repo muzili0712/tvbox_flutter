@@ -81,7 +81,7 @@ import UIKit
                     result(FlutterError(code: "INVALID_ARGS", message: "url is required", details: nil))
                     return
                 }
-                NodeJSManager.shared().loadSourceFromURL(url) { success, message in
+                NodeJSManager.shared().loadSource(fromURL: url) { success, message in
                     if success {
                         result(["success": true, "message": message ?? ""])
                     } else {
