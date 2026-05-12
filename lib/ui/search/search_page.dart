@@ -45,6 +45,9 @@ class _SearchPageState extends State<SearchPage> {
         final type = _selectedSite!['type'] as int? ?? 3;
         final api = _selectedSite!['api'] as String? ?? '';
         NodeJSService.instance.setCurrentSpider(key, type, apiBase: api);
+        await NodeJSService.instance.initSpider();
+      } else {
+        await NodeJSService.instance.initSpider();
       }
 
       final result = await NodeJSService.instance.search(keyword: keyword);

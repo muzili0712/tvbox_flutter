@@ -334,6 +334,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
     setState(() => _isLoading = true);
 
     try {
+      await NodeJSService.instance.initSpider();
       final result = await NodeJSService.instance.getCategoryContent(
         categoryId: widget.typeId,
         page: _currentPage,

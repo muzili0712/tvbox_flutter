@@ -30,6 +30,7 @@ class _DetailPageState extends State<DetailPage> {
   Future<void> _loadDetail() async {
     setState(() => _isLoading = true);
     try {
+      await NodeJSService.instance.initSpider();
       final result =
           await NodeJSService.instance.getVideoDetail(videoId: widget.videoId);
       final list = result['list'] as List<dynamic>? ?? [];

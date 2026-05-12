@@ -179,6 +179,24 @@ class NodeJSService {
     }
   }
 
+  Future<void> initSpider() async {
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
+      return;
+    }
+    try {
+      final url = '${_spiderBaseUrl()}${_spiderPath()}/init';
+      print('[initSpider] POST $url');
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({}),
+      ).timeout(const Duration(seconds: 10));
+      print('[initSpider] status=${response.statusCode} body=${response.body}');
+    } catch (e) {
+      print('[initSpider] error: $e');
+    }
+  }
+
   void setCurrentSpider(String key, int type, {String apiBase = ''}) {
     _currentSpiderKey = key;
     _currentSpiderType = type;

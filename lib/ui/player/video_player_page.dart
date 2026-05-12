@@ -68,6 +68,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     });
     final episode = widget.videoDetail!.episodes[index];
     try {
+      await NodeJSService.instance.initSpider();
       final result = await NodeJSService.instance.getPlayUrl(
         videoId: '',
         flag: episode.sourceName ?? '',
@@ -104,6 +105,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     });
     final episode = widget.videoDetail!.episodes[_currentEpisodeIndex];
     try {
+      await NodeJSService.instance.initSpider();
       final result = await NodeJSService.instance.getPlayUrl(
         videoId: '',
         flag: episode.sourceName ?? '',

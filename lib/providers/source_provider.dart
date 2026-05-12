@@ -158,6 +158,7 @@ class SourceProvider extends ChangeNotifier {
     final type = site['type'] as int? ?? 3;
     final api = site['api'] as String? ?? '';
     NodeJSService.instance.setCurrentSpider(key, type, apiBase: api);
+    await NodeJSService.instance.initSpider();
     await loadHomeContent();
   }
 
@@ -206,6 +207,7 @@ class SourceProvider extends ChangeNotifier {
         nodejs.setCurrentSpider(key, type, apiBase: api);
       }
 
+      await nodejs.initSpider();
       final homeResult = await nodejs.getHomeContent();
       final classData = homeResult['class'];
       if (classData is List) {
