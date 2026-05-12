@@ -40,19 +40,50 @@ globalThis.catServerFactory = (handle) => {
 globalThis.catDartServerPort = () => nativeServerPort;
 
 function loadScript(path) {
+    console.log('=== loadScript called with path:', path);
     const indexJSPath = path + '/index.js';
     const indexConfigJSPath = path + '/index.config.js';
-    delete require.cache[require.resolve(indexJSPath)];
-    try { delete require.cache[require.resolve(indexConfigJSPath)]; } catch (e) {}
-    sourceModule = require(indexJSPath);
+    console.log('Loading index.js from:', indexJSPath);
+    
+    try {
+        delete require.cache[require.resolve(indexJSPath)];
+    } catch (e) {
+        console.log('No cache to delete for index.js');
+    }
+    
+    try { 
+        delete require.cache[require.resolve(indexConfigJSPath)]; 
+    } catch (e) {
+        console.log('No cache to delete for index.config.js');
+    }
+    
+    try {
+        sourceModule = require(indexJSPath);
+        console.log('index.js loaded successfully');
+    } catch (e) {
+        console.error('ERROR loading index.js:', e);
+        console.error('Stack:', e.stack);
+        throw e;
+    }
+    
     let config = {};
     try {
         const configModule = require(indexConfigJSPath);
         config = configModule.default || configModule;
+        console.log('Config loaded');
     } catch (e) {
         console.log('Config load skipped:', e.message);
     }
-    sourceModule.start(config);
+    
+    try {
+        console.log('Calling sourceModule.start(config)...');
+        sourceModule.start(config);
+        console.log('sourceModule.start(config) completed');
+    } catch (e) {
+        console.error('ERROR in sourceModule.start(config):', e);
+        console.error('Stack:', e.stack);
+        throw e;
+    }
 }
 
 function sendMessageToNative(message) {
@@ -158,27 +189,45 @@ const mgmtServer = createServer((req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/source/loadPath') {
+        console.log('=== /source/loadPath endpoint called ===');
         let body = '';
         req.on('data', chunk => { body += chunk; });
         req.on('end', () => {
             try {
+                console.log('Request body:', body);
                 const data = JSON.parse(body);
                 const sourcePath = data.path;
+                console.log('sourcePath:', sourcePath);
+                
                 if (!sourcePath) {
+                    console.log('ERROR: path is required');
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: 'path is required' }));
                     return;
                 }
+                
                 try {
                     if (sourceModule && typeof sourceModule.stop === 'function') {
+                        console.log('Stopping existing sourceModule');
                         sourceModule.stop();
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.log('Error stopping sourceModule (non-fatal):', e.message);
+                }
+                
+                console.log('Clearing spiders');
                 clearSpiders();
+                
+                console.log('Calling loadScript');
                 loadScript(sourcePath);
+                
+                console.log('=== Success! Returning 200 ===');
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true, message: 'Source loaded from path' }));
             } catch (e) {
+                console.error('=== ERROR in /source/loadPath ===');
+                console.error('Error:', e);
+                console.error('Stack:', e.stack);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: e.message }));
             }

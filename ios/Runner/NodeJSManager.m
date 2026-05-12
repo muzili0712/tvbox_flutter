@@ -206,6 +206,7 @@
 
 - (void)loadSourceFromURL:(NSString *)urlString
                completion:(void (^)(BOOL success, NSString * _Nullable message))completion {
+    NSLog(@"=== Starting to load source from URL: %@ ===", urlString);
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *sourcePath = [self getDocumentsSourcePath];
         NSString *indexJSPath = [sourcePath stringByAppendingPathComponent:@"index.js"];
@@ -213,47 +214,79 @@
         NSString *configJSPath = [sourcePath stringByAppendingPathComponent:@"index.config.js"];
         NSString *configMd5Path = [sourcePath stringByAppendingPathComponent:@"index.config.js.md5"];
 
+        NSLog(@"Source path: %@", sourcePath);
+
         __block NSData *jsData = nil;
         __block NSData *md5Data = nil;
         __block NSData *configData = nil;
         __block NSData *configMd5Data = nil;
         __block NSError *jsError = nil;
         __block NSError *configError = nil;
+        __block NSHTTPURLResponse *jsResponse = nil;
+        __block NSHTTPURLResponse *configResponse = nil;
 
         dispatch_group_t group = dispatch_group_create();
 
         dispatch_group_enter(group);
+        NSLog(@"Downloading main source: %@", urlString);
         [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:urlString] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             jsData = data;
             jsError = error;
+            jsResponse = (NSHTTPURLResponse *)response;
+            if (error) {
+                NSLog(@"ERROR downloading main source: %@", error.localizedDescription);
+            } else {
+                NSLog(@"Main source downloaded, status: %ld, size: %lu bytes", (long)jsResponse.statusCode, (unsigned long)data.length);
+            }
             dispatch_group_leave(group);
         }] resume];
 
         dispatch_group_enter(group);
-        [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:[urlString stringByAppendingString:@".md5"]] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSString *md5Url = [urlString stringByAppendingString:@".md5"];
+        NSLog(@"Downloading md5: %@", md5Url);
+        [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:md5Url] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             md5Data = data;
+            if (error) {
+                NSLog(@"MD5 download failed (optional): %@", error.localizedDescription);
+            } else {
+                NSLog(@"MD5 downloaded, size: %lu bytes", (unsigned long)data.length);
+            }
             dispatch_group_leave(group);
         }] resume];
 
         dispatch_group_enter(group);
         NSString *configUrl = [urlString stringByReplacingOccurrencesOfString:@"/index.js" withString:@"/index.config.js"];
+        NSLog(@"Downloading config: %@", configUrl);
         [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:configUrl] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             configData = data;
             configError = error;
+            configResponse = (NSHTTPURLResponse *)response;
+            if (error) {
+                NSLog(@"Config download failed (optional): %@", error.localizedDescription);
+            } else {
+                NSLog(@"Config downloaded, status: %ld", (long)configResponse.statusCode);
+            }
             dispatch_group_leave(group);
         }] resume];
 
         dispatch_group_enter(group);
-        [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:[configUrl stringByAppendingString:@".md5"]] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSString *configMd5Url = [configUrl stringByAppendingString:@".md5"];
+        [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:configMd5Url] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             configMd5Data = data;
             dispatch_group_leave(group);
         }] resume];
 
+        NSLog(@"Waiting for all downloads to complete...");
         dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC));
+        NSLog(@"All downloads completed");
 
         if (jsError || !jsData) {
+            NSString *errorMsg = [NSString stringWithFormat:@"Failed to download source: %@ (status: %ld)", 
+                                  jsError ? jsError.localizedDescription : @"no data", 
+                                  jsResponse ? (long)jsResponse.statusCode : -1];
+            NSLog(@"ERROR: %@", errorMsg);
             dispatch_async(dispatch_get_main_queue(), ^{
-                completion(NO, [NSString stringWithFormat:@"Failed to download source: %@", jsError.localizedDescription]);
+                completion(NO, errorMsg);
             });
             return;
         }
@@ -278,23 +311,32 @@
         }
 
         NSFileManager *fm = [NSFileManager defaultManager];
+        NSLog(@"Creating directory at: %@", sourcePath);
         [fm createDirectoryAtPath:sourcePath withIntermediateDirectories:YES attributes:nil error:nil];
 
-        [jsData writeToFile:indexJSPath atomically:YES];
+        NSLog(@"Writing index.js to: %@", indexJSPath);
+        BOOL writeResult = [jsData writeToFile:indexJSPath atomically:YES];
+        if (!writeResult) {
+            NSLog(@"ERROR: Failed to write index.js");
+        }
+
         if (md5Data) {
             [md5Data writeToFile:indexMd5Path atomically:YES];
         }
 
         if (configData && !configError) {
+            NSLog(@"Writing index.config.js");
             [configData writeToFile:configJSPath atomically:YES];
             if (configMd5Data) {
                 [configMd5Data writeToFile:configMd5Path atomically:YES];
             }
         } else {
+            NSLog(@"Creating default index.config.js");
             NSString *defaultConfig = @"module.exports = { color: [] };";
             [defaultConfig writeToFile:configJSPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
 
+        NSLog(@"Files saved successfully, now sending load command to Node.js with path: %@", sourcePath);
         dispatch_async(dispatch_get_main_queue(), ^{
             [self sendLoadCommandToNodeJS:sourcePath completion:completion];
         });
@@ -306,6 +348,8 @@
 }
 
 - (void)sendLoadCommandToNodeJS:(NSString *)path retryCount:(int)retryCount completion:(void (^)(BOOL, NSString * _Nullable))completion {
+    NSLog(@"sendLoadCommandToNodeJS called, managementPort: %d, retryCount: %d", self.managementPort, retryCount);
+    
     if (self.managementPort <= 0) {
         if (retryCount > 0) {
             NSLog(@"Management port not ready, retrying... (%d left)", retryCount);
@@ -314,11 +358,14 @@
             });
             return;
         }
-        if (completion) completion(NO, @"Management server not ready after retries");
+        NSString *errorMsg = @"Management server not ready after retries";
+        NSLog(@"ERROR: %@", errorMsg);
+        if (completion) completion(NO, errorMsg);
         return;
     }
 
     NSString *urlString = [NSString stringWithFormat:@"http://127.0.0.1:%d/source/loadPath", self.managementPort];
+    NSLog(@"Sending request to: %@", urlString);
     NSURL *url = [NSURL URLWithString:urlString];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"POST";
@@ -329,9 +376,12 @@
     request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
 
     [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        
         if (error) {
+            NSLog(@"ERROR: Load command failed with error: %@", error.localizedDescription);
             if (retryCount > 0) {
-                NSLog(@"Load command failed: %@, retrying... (%d left)", error.localizedDescription, retryCount);
+                NSLog(@"Retrying... (%d left)", retryCount);
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self sendLoadCommandToNodeJS:path retryCount:retryCount - 1 completion:completion];
                 });
@@ -343,18 +393,20 @@
             return;
         }
 
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSLog(@"Response status code: %ld", (long)httpResponse.statusCode);
+        NSString *responseBody = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"";
+        NSLog(@"Response body: %@", responseBody);
+
         if (httpResponse.statusCode >= 400) {
-            NSString *responseBody = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"";
             if (retryCount > 0 && httpResponse.statusCode >= 500) {
-                NSLog(@"Load command server error (%ld): %@, retrying... (%d left)", (long)httpResponse.statusCode, responseBody, retryCount);
+                NSLog(@"Server error, retrying... (%d left)", retryCount);
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self sendLoadCommandToNodeJS:path retryCount:retryCount - 1 completion:completion];
                 });
                 return;
             }
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, [NSString stringWithFormat:@"Server error: %@", responseBody]);
+                if (completion) completion(NO, [NSString stringWithFormat:@"Server error (%ld): %@", (long)httpResponse.statusCode, responseBody]);
             });
             return;
         }
@@ -365,12 +417,15 @@
         }
 
         if (responseDict && responseDict[@"error"]) {
+            NSString *errorMsg = [NSString stringWithFormat:@"Load error: %@", responseDict[@"error"]];
+            NSLog(@"ERROR: %@", errorMsg);
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, [NSString stringWithFormat:@"Load error: %@", responseDict[@"error"]]);
+                if (completion) completion(NO, errorMsg);
             });
             return;
         }
 
+        NSLog(@"=== Source loaded successfully! ===");
         dispatch_async(dispatch_get_main_queue(), ^{
             if (completion) completion(YES, @"Source loaded successfully");
         });

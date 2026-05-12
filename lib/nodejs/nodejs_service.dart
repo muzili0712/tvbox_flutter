@@ -115,17 +115,28 @@ class NodeJSService {
 
   Future<bool> loadSourceFromURL(String url) async {
     try {
+      print('=== loadSourceFromURL called with url: $url ===');
       final result = await _channel.invokeMethod('loadSourceFromURL', {'url': url});
+      print('loadSourceFromURL result: $result');
       if (result is Map && result['success'] == true) {
         await waitForSpiderPort();
         return true;
       }
       return false;
+    } on FlutterError catch (e) {
+      print('FlutterError in loadSourceFromURL: ${e.message}, code: ${e.code}, details: ${e.details}');
+      _lastErrorMessage = e.message ?? 'Unknown error';
+      return false;
     } catch (e) {
       print('loadSourceFromURL error: $e');
+      _lastErrorMessage = e.toString();
       return false;
     }
   }
+  
+  String? _lastErrorMessage;
+  
+  String? get lastErrorMessage => _lastErrorMessage;
 
   Future<void> waitForSpiderPort({Duration timeout = const Duration(seconds: 30)}) async {
     if (_spiderPort > 0) return;

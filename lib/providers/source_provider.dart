@@ -75,7 +75,7 @@ class SourceProvider extends ChangeNotifier {
         }
         final success = await nodejs.loadSourceFromURL(url);
         if (!success) {
-          _errorMessage = 'Failed to load remote source';
+          _errorMessage = nodejs.lastErrorMessage ?? 'Failed to load remote source';
           _isLoading = false;
           notifyListeners();
           return false;
