@@ -14,16 +14,13 @@ import UIKit
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        GeneratedPluginRegistrant.register(with: self)
+        
         let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
-        if window == nil {
-            let flutterViewController = FlutterViewController()
-            window = UIWindow(frame: UIScreen.main.bounds)
-            window?.rootViewController = flutterViewController
-            window?.makeKeyAndVisible()
+        guard let controller = window?.rootViewController as? FlutterViewController else {
+            return result
         }
-
-        let controller = window?.rootViewController as? FlutterViewController
 
         setupNodeJSChannel(with: controller)
         setupEventChannel(with: controller)
