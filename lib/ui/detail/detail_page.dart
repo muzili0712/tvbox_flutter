@@ -5,6 +5,7 @@ import 'package:tvbox_flutter/models/video_detail.dart';
 import 'package:tvbox_flutter/ui/player/video_player_page.dart';
 import 'package:tvbox_flutter/providers/history_provider.dart';
 import 'package:tvbox_flutter/providers/favorite_provider.dart';
+import 'package:tvbox_flutter/providers/source_provider.dart';
 import 'package:tvbox_flutter/services/log_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tvbox_flutter/models/video_item.dart';
@@ -133,8 +134,36 @@ class _DetailPageState extends State<DetailPage> {
       if (playUrl.isEmpty) {
         log('[详情页] ❌ 播放地址为空！');
         if (mounted) {
+          // 检测是否是网盘播放源，提示去配置中心设置
+          bool isCloudDriveSource = episode.sourceName != null && 
+            (episode.sourceName!.contains('夸克') || 
+             episode.sourceName!.contains('百度') || 
+             episode.sourceName!.contains('阿里') ||
+             episode.sourceName!.contains('夸克') ||
+             episode.sourceName!.contains('迅雷'));
+          
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('获取播放地址失败')),
+            SnackBar(
+              content: Text(isCloudDriveSource 
+                ? '获取播放地址失败，请先到配置中心设置网盘cookie' 
+                : '获取播放地址失败'),
+              duration: const Duration(seconds: 4),
+              action: isCloudDriveSource ? SnackBarAction(
+                label: '去配置',
+                onPressed: () {
+                  // 跳转到配置中心
+                  final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+                  Navigator.pop(context); // 先关闭详情页
+                  // 然后尝试切换到配置中心线路
+                  for (final site in sourceProvider.sites) {
+                    if (site['key'] == 'nodejs_baseset') {
+                      sourceProvider.setCurrentSite(site);
+                      break;
+                    }
+                  }
+                },
+              ) : null,
+            ),
           );
         }
         return;

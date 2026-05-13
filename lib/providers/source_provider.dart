@@ -26,6 +26,11 @@ class SourceProvider extends ChangeNotifier {
   Map<String, dynamic> get filters => _filters;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  bool get isCurrentSiteIndex {
+    if (_currentSite == null) return false;
+    final indexs = _currentSite!['indexs'];
+    return indexs != null && indexs == 1;
+  }
 
   SourceProvider() {
     _loadSources();

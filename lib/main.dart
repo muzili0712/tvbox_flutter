@@ -32,8 +32,47 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    log('[main] 📱 应用生命周期: $state');
+    
+    // 当应用从后台恢复时
+    if (state == AppLifecycleState.resumed) {
+      log('[main] ⚡ 应用从后台恢复，重新初始化服务');
+      _onAppResumed();
+    }
+  }
+
+  Future<void> _onAppResumed() async {
+    try {
+      // 重新初始化NodeJS服务
+      await NodeJSService.instance.initialize();
+      log('[main] ✅ NodeJS服务重新初始化完成');
+    } catch (e) {
+      log('[main] ❌ 重新初始化失败: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

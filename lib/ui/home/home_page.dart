@@ -5,6 +5,7 @@ import 'package:tvbox_flutter/providers/source_provider.dart';
 import 'package:tvbox_flutter/ui/widgets/video_card.dart';
 import 'package:tvbox_flutter/ui/search/search_page.dart';
 import 'package:tvbox_flutter/ui/settings/settings_page.dart';
+import 'package:tvbox_flutter/ui/settings/web_config_page.dart';
 import 'package:tvbox_flutter/ui/history/history_page.dart';
 import 'package:tvbox_flutter/ui/favorite/favorite_page.dart';
 import 'package:tvbox_flutter/ui/cloud_drive/cloud_drive_page.dart';
@@ -71,21 +72,42 @@ class HomeContent extends StatefulWidget {
 }
 
 class _HomeContentState extends State<HomeContent>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
   bool _isLoading = true;
+  bool _wasPaused = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 0, vsync: this);
     _loadHomeData();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    log('[主页] 📱 生命周期: $state');
+    
+    // 记录是否曾经暂停
+    if (state == AppLifecycleState.paused) {
+      _wasPaused = true;
+    }
+    
+    // 当应用从后台恢复时，重新加载首页
+    if (_wasPaused && state == AppLifecycleState.resumed) {
+      log('[主页] ⚡ 从后台恢复，重新加载数据');
+      _wasPaused = false;
+      _loadHomeData();
+    }
   }
 
   Future<void> _loadHomeData() async {
@@ -393,10 +415,10 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
       
       final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
       
-      Map<String, dynamic> filterParams = {};
-      List<dynamic>? filters = sourceProvider.filters[widget.typeId] as List<dynamic>?;
-      
       log('[分类内容] 🔍 调试 - filters.keys=${sourceProvider.filters.keys.toList()}, typeId=${widget.typeId}, typeIdType=${widget.typeId.runtimeType}');
+      
+      List<dynamic>? filters = sourceProvider.filters[widget.typeId] as List<dynamic>?;
+      Map<String, dynamic> filterParams = {};
       
       if (filters != null && filters.isNotEmpty) {
         log('[分类内容] 🔍 当前分类(${widget.typeId})有${filters.length}个filters');
@@ -450,6 +472,48 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
 
       if (newVideos.isNotEmpty) {
         log('[分类内容] 📋 第一个视频: name=${newVideos.first.name}, id=${newVideos.first.id}');
+      } else if (_currentPage == 1) {
+        log('[分类内容] ⚠️ 分类内容为空，可能该分类需要子分类或filters参数');
+        // 检查是否有filters可用但未使用
+        final availableFilters = sourceProvider.filters[widget.typeId];
+        if (availableFilters != null && availableFilters is List && availableFilters.isNotEmpty) {
+          log('[分类内容] 💡 该分类有${availableFilters.length}个filter可用，尝试使用第一个filter值重新加载');
+          // 尝试使用第一个filter值重新加载
+          for (final filter in availableFilters) {
+            if (filter is Map<String, dynamic>) {
+              final key = filter['key'] as String?;
+              final values = filter['value'] as List<dynamic>?;
+              if (key != null && values != null && values.isNotEmpty) {
+                final firstValue = values.first;
+                if (firstValue is Map && firstValue['v'] != null) {
+                  filterParams[key] = firstValue['v'];
+                  log('[分类内容] 💡 使用filter: $key=${firstValue['v']}');
+                }
+              }
+            }
+          }
+          if (filterParams.isNotEmpty) {
+            final retryResult = await NodeJSService.instance.getCategoryContent(
+              categoryId: widget.typeId,
+              page: 1,
+              filters: filterParams,
+            );
+            final retryList = retryResult['list'] as List<dynamic>? ?? [];
+            if (retryList.isNotEmpty) {
+              log('[分类内容] ✅ 使用filter后获取到${retryList.length}个视频');
+              final retryVideos = retryList
+                  .map((json) => VideoItem.fromJson(json as Map<String, dynamic>))
+                  .toList();
+              setState(() {
+                _videos = retryVideos;
+                _hasMore = 1 < (retryResult['pagecount'] as int? ?? 1);
+                _currentPage = 2;
+                _isLoading = false;
+              });
+              return;
+            }
+          }
+        }
       }
 
       setState(() {
@@ -479,7 +543,28 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
     }
 
     if (_videos.isEmpty) {
-      return const Center(child: Text('暂无内容'));
+      final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+      final isIndexSite = sourceProvider.isCurrentSiteIndex;
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(
+              isIndexSite ? '该线路为索引服务，请点击影视跳转搜索' : '暂无内容',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            if (!isIndexSite) ...[
+              const SizedBox(height: 8),
+              Text(
+                '可尝试切换其他线路或使用搜索功能',
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              ),
+            ],
+          ],
+        ),
+      );
     }
 
     return GridView.builder(
@@ -501,12 +586,38 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
         return VideoCard(
           video: video,
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DetailPage(videoId: video.id),
-              ),
-            );
+            final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+            final currentSiteKey = sourceProvider.currentSite?['key'] as String? ?? '';
+            final isIndexSite = sourceProvider.isCurrentSiteIndex;
+            
+            // 处理索引服务线路（如豆瓣）的点击行为 - 跳转搜索
+            if (isIndexSite || currentSiteKey == 'nodejs_douban') {
+              log('[分类内容] 🎬 索引线路，跳转到搜索: ${video.name}');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SearchPage(initialSearch: video.name),
+                ),
+              );
+            } else if (currentSiteKey == 'nodejs_baseset') {
+              // 配置中心线路，打开Web配置页面
+              log('[分类内容] ⚙️ 配置中心线路，打开Web配置页面');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const WebConfigPage(),
+                ),
+              );
+            } else {
+              // 正常处理
+              log('[分类内容] 🎬 正常跳转到详情页: ${video.name}, id=${video.id}');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DetailPage(videoId: video.id),
+                ),
+              );
+            }
           },
         );
       },
