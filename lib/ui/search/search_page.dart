@@ -71,7 +71,7 @@ class _SearchPageState extends State<SearchPage> {
     if (keyword.isEmpty) return;
     
     final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
-    final sites = sourceProvider.allSites;
+    final sites = sourceProvider.sites;
     
     // 筛选出正常的影视站点（排除豆瓣和配置中心）
     final validSites = sites.where((site) {
@@ -113,10 +113,14 @@ class _SearchPageState extends State<SearchPage> {
 
   Future<void> _searchSingleSite(String siteKey, String keyword, Map<String, dynamic> site) async {
     try {
-      final nodejsService = NodejsService();
+      final nodejsService = NodeJSService.instance;
       
       // 临时切换到该站点进行搜索
-      await nodejsService.setSpiderBySiteKey(siteKey);
+      final shortKey = siteKey.replaceFirst('nodejs_', '');
+      final type = site['type'] as int? ?? 3;
+      final api = site['api'] as String? ?? '';
+      nodejsService.setCurrentSpider(shortKey, type, apiBase: api);
+      await nodejsService.initSpider();
       
       final result = await nodejsService.search(keyword: keyword, page: 1);
       
@@ -287,7 +291,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildSiteList(SourceProvider sourceProvider) {
-    final sites = sourceProvider.allSites.where((site) {
+    final sites = sourceProvider.sites.where((site) {
       final key = site['key']?.toString() ?? '';
       return key.isNotEmpty && 
              key != 'nodejs_douban' && 
