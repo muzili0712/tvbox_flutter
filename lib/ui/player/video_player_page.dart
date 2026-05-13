@@ -38,6 +38,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   late int _currentEpisodeIndex;
   late int _currentSourceIndex;
   String _resolvedPlayUrl = '';
+  bool _urlResolved = false;
 
   @override
   void initState() {
@@ -45,13 +46,14 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     _currentPlayer = Provider.of<PlayerProvider>(context, listen: false).defaultPlayer;
     _currentEpisodeIndex = widget.initialEpisodeIndex;
     _currentSourceIndex = widget.initialSourceIndex;
-    _loadVideo();
+    _resolvedPlayUrl = widget.playUrl;
+    _resolveAndLoadVideo();
   }
 
-  Future<void> _loadVideo() async {
+  Future<void> _resolveAndLoadVideo() async {
     setState(() => _isLoading = true);
     
-    _resolvedPlayUrl = widget.playUrl;
+    String finalUrl = widget.playUrl;
     
     if (widget.playUrl.contains('127.0.0.1') && widget.playUrl.contains('proxy')) {
       try {
@@ -60,8 +62,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         if (response.statusCode == 200) {
           final body = response.body.trim();
           if (body.startsWith('http') && (body.contains('.m3u8') || body.contains('.mp4'))) {
-            _resolvedPlayUrl = body;
-            print('[VideoPlayer] Got actual stream URL: ${_resolvedPlayUrl.substring(0, 100)}...');
+            finalUrl = body;
+            print('[VideoPlayer] Got actual stream URL: ${finalUrl.substring(0, 100)}...');
           }
         }
       } catch (e) {
@@ -69,8 +71,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       }
     }
     
-    await Future.delayed(const Duration(milliseconds: 500));
-    setState(() => _isLoading = false);
+    setState(() {
+      _resolvedPlayUrl = finalUrl;
+      _urlResolved = true;
+      _isLoading = false;
+    });
+  }
+
+  void _loadVideo() {
+    // 空实现，避免老函数调用
   }
 
   void _changePlayer(PlayerType player) {
@@ -170,10 +179,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   Widget _buildPlayer() {
+    if (!_urlResolved) {
+      return const SizedBox.shrink();
+    }
+    
     final playUrl = _resolvedPlayUrl.isNotEmpty ? _resolvedPlayUrl : widget.playUrl;
+    final playerKey = ValueKey<String>(playUrl);
+    
     switch (_currentPlayer) {
       case PlayerType.vlc:
         return VlcPlayerWidget(
+          key: playerKey,
           url: playUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
@@ -186,6 +202,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         );
       case PlayerType.system:
         return SystemPlayerWidget(
+          key: playerKey,
           url: playUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
