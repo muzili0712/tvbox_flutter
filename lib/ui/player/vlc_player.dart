@@ -24,6 +24,8 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
   bool _hasError = false;
   bool _isResolving = true;
   String? _resolvedUrl;
+  int _retryCount = 0;
+  static const int _maxRetries = 2;
 
   @override
   void initState() {
@@ -78,40 +80,48 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
     _initVlc(playUrl);
   }
 
-  void _initVlc(String url) {
+  Future<void> _initVlc(String url) async {
     log('[VLC播放器] 🎬 初始化VLC控制器: url=$url');
     
-    // 检查是否是M3U8格式
     final isM3U8 = url.contains('.m3u8') || url.contains('m3u8');
     log('[VLC播放器] 📋 URL类型: ${isM3U8 ? 'M3U8/HLS' : 'MP4/Direct'}');
+    
+    if (_controller != null) {
+      _controller!.removeListener(_onPlayerStateChanged);
+      await _controller!.dispose();
+      _controller = null;
+    }
     
     _controller = VlcPlayerController.network(
       url,
       autoPlay: true,
       options: VlcPlayerOptions(
         video: VlcVideoOptions([
-          '--network-caching=10000',
-          '--file-caching=10000',
-          '--live-caching=10000',
-          if (isM3U8) '--hls-live-edge=4',
-          if (isM3U8) '--hls-segment-threads=2',
-          if (isM3U8) '--avformat-hls-init-windowsize=3',
+          '--network-caching=15000',
+          '--file-caching=15000',
+          '--live-caching=15000',
+          '--avformat-options',
+          'fflags=nogenpts',
+          if (isM3U8) '--hls-live-edge=3',
+          if (isM3U8) '--hls-segment-threads=1',
         ]),
         audio: VlcAudioOptions([
-          '--network-caching=10000',
+          '--network-caching=15000',
         ]),
         subtitle: VlcSubtitleOptions([]),
         http: VlcHttpOptions([
           '--http-user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-          '--http-referrer=https://51touxiang.com/',
+          '--http-referrer=https://vip.123pan.cn/',
           '--http-continuous-flow',
+          '--http-connect-timeout=10',
+          '--http-max-connections=3',
         ]),
         rtp: VlcRtpOptions([]),
         advanced: VlcAdvancedOptions([
-          '--avcodec-threads=2',
+          '--avcodec-threads=1',
           '--clock-jitter=0',
           '--clock-synchro=0',
-          '--sout-mux-caching=10000',
+          '--sout-mux-caching=15000',
         ]),
       ),
     );
@@ -120,16 +130,25 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
 
     setState(() {});
     
-    // 延迟检查播放状态
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && _controller != null) {
-        log('[VLC播放器] 📊 播放状态检查: isPlaying=${_controller!.value.isPlaying}, isBuffering=${_controller!.value.isBuffering}, duration=${_controller!.value.duration}');
-        if (!_controller!.value.isPlaying && !_controller!.value.hasError) {
-          log('[VLC播放器] 🔄 尝试重新播放...');
-          _controller!.play();
+    await Future.delayed(const Duration(seconds: 2));
+    
+    if (mounted && _controller != null) {
+      final isPlaying = _controller!.value.isPlaying;
+      final duration = _controller!.value.duration.inMilliseconds.toDouble();
+      log('[VLC播放器] 📊 初始状态检查: isPlaying=$isPlaying, duration=$duration');
+      
+      if (!isPlaying && !_controller!.value.hasError && _retryCount < _maxRetries) {
+        _retryCount++;
+        log('[VLC播放器] 🔄 尝试重新播放 (第$_retryCount次)...');
+        await _controller!.play();
+        await Future.delayed(const Duration(seconds: 3));
+        
+        if (mounted && _controller != null) {
+          final retryIsPlaying = _controller!.value.isPlaying;
+          log('[VLC播放器] 📊 重试后状态: isPlaying=$retryIsPlaying');
         }
       }
-    });
+    }
   }
 
   void _onPlayerStateChanged() {
@@ -138,6 +157,17 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
     if (_controller!.value.hasError && !_hasError) {
       _hasError = true;
       log('[VLC播放器] ❌ 播放错误: ${_controller!.value.errorDescription}');
+      
+      if (_retryCount < _maxRetries) {
+        _retryCount++;
+        log('[VLC播放器] 🔄 检测到错误，尝试重新初始化 (第$_retryCount次)...');
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted && _resolvedUrl != null) {
+            _hasError = false;
+            _initVlc(_resolvedUrl!);
+          }
+        });
+      }
     }
 
     if (_controller!.value.isPlaying && _hasError) {
@@ -175,8 +205,27 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
     }
 
     if (_controller == null) {
-      return const Center(
-        child: Text('播放器初始化失败', style: TextStyle(color: Colors.white)),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 8),
+            const Text('播放器初始化失败', style: TextStyle(color: Colors.white)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _isResolving = true;
+                  _retryCount = 0;
+                  _hasError = false;
+                });
+                _resolveAndPlay();
+              },
+              child: const Text('重试'),
+            ),
+          ],
+        ),
       );
     }
 

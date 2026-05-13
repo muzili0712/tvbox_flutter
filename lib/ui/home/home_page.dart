@@ -336,6 +336,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
   int _currentPage = 1;
   bool _hasMore = true;
   String _lastSiteKey = '';
+  String _lastFiltersKey = '';
 
   @override
   bool get wantKeepAlive => true;
@@ -344,18 +345,40 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
   void initState() {
     super.initState();
     _lastSiteKey = widget.siteKey;
-    _loadContent();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _waitForFiltersAndLoad();
+    });
+  }
+
+  Future<void> _waitForFiltersAndLoad() async {
+    final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+    int waitCount = 0;
+    while (waitCount < 20) {
+      if (sourceProvider.categories.isNotEmpty && 
+          sourceProvider.filters.isNotEmpty && 
+          sourceProvider.currentSite?['key'] == 'nodejs_$widget.siteKey') {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 200));
+      waitCount++;
+    }
+    if (mounted) {
+      _loadContent();
+    }
   }
 
   @override
   void didUpdateWidget(_CategoryContentLoader oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.siteKey != _lastSiteKey) {
+    if (widget.siteKey != _lastSiteKey || 
+        widget.typeId != oldWidget.typeId ||
+        _lastFiltersKey != Provider.of<SourceProvider>(context, listen: false).filters.keys.toString()) {
       _lastSiteKey = widget.siteKey;
+      _lastFiltersKey = Provider.of<SourceProvider>(context, listen: false).filters.keys.toString();
       _currentPage = 1;
       _hasMore = true;
       _videos = [];
-      _loadContent();
+      _waitForFiltersAndLoad();
     }
   }
 
@@ -370,28 +393,30 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
       
       final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
       
-      // 等待filters加载完成（切换线路时的时序问题）
-      int waitCount = 0;
-      while (sourceProvider.filters.isEmpty && waitCount < 10) {
-        log('[分类内容] ⏳ 等待filters加载...');
-        await Future.delayed(const Duration(milliseconds: 500));
-        waitCount++;
-      }
-      
-      final filters = sourceProvider.filters[widget.typeId] as List<dynamic>? ?? [];
-      
       Map<String, dynamic> filterParams = {};
-      if (filters.isNotEmpty) {
+      List<dynamic>? filters = sourceProvider.filters[widget.typeId] as List<dynamic>?;
+      
+      if (filters != null && filters.isNotEmpty) {
         for (final filter in filters) {
           if (filter is Map<String, dynamic>) {
             final key = filter['key'] as String?;
             final init = filter['init'];
-            if (key != null && init != null && init.toString().isNotEmpty) {
-              filterParams[key] = init;
+            final values = filter['value'] as List<dynamic>?;
+            
+            if (key != null) {
+              if (init != null && init.toString().isNotEmpty) {
+                filterParams[key] = init;
+              } else if (values != null && values.isNotEmpty) {
+                final firstValue = values.first;
+                if (firstValue is Map && firstValue['v'] != null) {
+                  filterParams[key] = firstValue['v'];
+                }
+              }
             }
           }
         }
       }
+      
       log('[分类内容] 📋 使用filters: $filterParams');
       
       final result = await NodeJSService.instance.getCategoryContent(
