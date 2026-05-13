@@ -57,17 +57,24 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     
     if (widget.playUrl.contains('127.0.0.1') && widget.playUrl.contains('proxy')) {
       try {
-        print('[VideoPlayer] Detected proxy URL, fetching actual stream...');
-        final response = await http.get(Uri.parse(widget.playUrl)).timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
-          final body = response.body.trim();
-          if (body.startsWith('http') && (body.contains('.m3u8') || body.contains('.mp4'))) {
-            finalUrl = body;
-            print('[VideoPlayer] Got actual stream URL: ${finalUrl.substring(0, 100)}...');
+        final uri = Uri.parse(widget.playUrl);
+        final actualUrl = uri.queryParameters['url'];
+        if (actualUrl != null && actualUrl.isNotEmpty) {
+          finalUrl = actualUrl;
+          print('[VideoPlayer] Extracted direct URL from proxy: ${finalUrl.substring(0, finalUrl.length > 100 ? 100 : finalUrl.length)}...');
+        } else {
+          print('[VideoPlayer] No url param in proxy, trying HTTP fetch...');
+          final response = await http.get(uri).timeout(const Duration(seconds: 10));
+          if (response.statusCode == 200) {
+            final body = response.body.trim();
+            if (body.startsWith('http') && (body.contains('.m3u8') || body.contains('.mp4'))) {
+              finalUrl = body;
+              print('[VideoPlayer] Got actual stream URL: ${finalUrl.substring(0, 100)}...');
+            }
           }
         }
       } catch (e) {
-        print('[VideoPlayer] Proxy fetch error: $e');
+        print('[VideoPlayer] Proxy resolve error: $e');
       }
     }
     
