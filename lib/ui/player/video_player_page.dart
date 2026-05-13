@@ -141,23 +141,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   Widget _buildPlayer() {
-    String playUrl = widget.playUrl;
-    if (_currentPlayer == PlayerType.vlc && widget.playUrl.contains('127.0.0.1') && widget.playUrl.contains('proxy')) {
-      try {
-        final uri = Uri.parse(widget.playUrl);
-        final actualUrl = uri.queryParameters['url'];
-        if (actualUrl != null && actualUrl.isNotEmpty) {
-          playUrl = actualUrl;
-        }
-      } catch (e) {
-        // 使用原 URL
-      }
-    }
-
     switch (_currentPlayer) {
       case PlayerType.vlc:
         return VlcPlayerWidget(
-          url: playUrl,
+          url: widget.playUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
               _isPlaying = isPlaying;
