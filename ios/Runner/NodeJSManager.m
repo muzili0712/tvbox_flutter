@@ -211,6 +211,13 @@
 - (void)loadSourceFromURL:(NSString *)urlString
                completion:(void (^)(BOOL success, NSString * _Nullable message))completion {
     NSLog(@"=== Starting to load source from URL: %@ ===", urlString);
+
+    NSString *normalizedUrl = urlString;
+    if ([normalizedUrl hasSuffix:@".js.md5"]) {
+        normalizedUrl = [normalizedUrl substringToIndex:normalizedUrl.length - 4];
+        NSLog(@"Normalized URL (removed .md5 suffix): %@", normalizedUrl);
+    }
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *sourcePath = [self getDocumentsSourcePath];
         NSString *indexJSPath = [sourcePath stringByAppendingPathComponent:@"index.js"];
@@ -219,6 +226,55 @@
         NSString *configMd5Path = [sourcePath stringByAppendingPathComponent:@"index.config.js.md5"];
 
         NSLog(@"Source path: %@", sourcePath);
+
+        NSFileManager *fm = [NSFileManager defaultManager];
+        BOOL localJSExists = [fm fileExistsAtPath:indexJSPath];
+        BOOL localMd5Exists = [fm fileExistsAtPath:indexMd5Path];
+        NSLog(@"Local cache check: index.js exists=%d, index.js.md5 exists=%d", localJSExists, localMd5Exists);
+
+        if (localJSExists && localMd5Exists) {
+            __block NSData *remoteMd5Data = nil;
+            __block BOOL md5DownloadSuccess = NO;
+
+            dispatch_group_t md5Group = dispatch_group_create();
+            dispatch_group_enter(md5Group);
+            NSString *md5Url = [normalizedUrl stringByAppendingString:@".md5"];
+            NSLog(@"Cache check: downloading remote MD5: %@", md5Url);
+            [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:md5Url] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                if (!error && data) {
+                    remoteMd5Data = data;
+                    md5DownloadSuccess = YES;
+                    NSLog(@"Remote MD5 downloaded, size: %lu bytes", (unsigned long)data.length);
+                } else {
+                    NSLog(@"Remote MD5 download failed: %@", error.localizedDescription);
+                }
+                dispatch_group_leave(md5Group);
+            }] resume];
+
+            dispatch_group_wait(md5Group, dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC));
+
+            if (md5DownloadSuccess && remoteMd5Data) {
+                NSString *remoteMd5 = [[NSString alloc] initWithData:remoteMd5Data encoding:NSUTF8StringEncoding];
+                remoteMd5 = [remoteMd5 stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+                NSString *localMd5 = [[NSString alloc] initWithData:[NSData dataWithContentsOfFile:indexMd5Path] encoding:NSUTF8StringEncoding];
+                localMd5 = [localMd5 stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+                NSLog(@"Cache MD5 comparison: local=%@, remote=%@", localMd5, remoteMd5);
+
+                if (remoteMd5.length > 0 && [localMd5 isEqualToString:remoteMd5]) {
+                    NSLog(@"✅ MD5 match! Using cached source, skipping download");
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [self sendLoadCommandToNodeJS:sourcePath completion:completion];
+                    });
+                    return;
+                } else {
+                    NSLog(@"🔄 MD5 mismatch or empty, need to re-download source");
+                }
+            } else {
+                NSLog(@"⚠️ Could not download remote MD5, proceeding with full download");
+            }
+        }
 
         __block NSData *jsData = nil;
         __block NSData *md5Data = nil;
@@ -232,8 +288,8 @@
         dispatch_group_t group = dispatch_group_create();
 
         dispatch_group_enter(group);
-        NSLog(@"Downloading main source: %@", urlString);
-        [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:urlString] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSLog(@"Downloading main source: %@", normalizedUrl);
+        [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:normalizedUrl] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             jsData = data;
             jsError = error;
             jsResponse = (NSHTTPURLResponse *)response;
@@ -246,7 +302,7 @@
         }] resume];
 
         dispatch_group_enter(group);
-        NSString *md5Url = [urlString stringByAppendingString:@".md5"];
+        NSString *md5Url = [normalizedUrl stringByAppendingString:@".md5"];
         NSLog(@"Downloading md5: %@", md5Url);
         [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:md5Url] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             md5Data = data;
@@ -259,7 +315,7 @@
         }] resume];
 
         dispatch_group_enter(group);
-        NSString *configUrl = [urlString stringByReplacingOccurrencesOfString:@"/index.js" withString:@"/index.config.js"];
+        NSString *configUrl = [normalizedUrl stringByReplacingOccurrencesOfString:@"/index.js" withString:@"/index.config.js"];
         NSLog(@"Downloading config: %@", configUrl);
         [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:configUrl] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             configData = data;
@@ -311,10 +367,10 @@
                     });
                     return;
                 }
+                NSLog(@"✅ Downloaded source MD5 verified successfully");
             }
         }
 
-        NSFileManager *fm = [NSFileManager defaultManager];
         NSLog(@"Creating directory at: %@", sourcePath);
         [fm createDirectoryAtPath:sourcePath withIntermediateDirectories:YES attributes:nil error:nil];
 
@@ -326,6 +382,7 @@
 
         if (md5Data) {
             [md5Data writeToFile:indexMd5Path atomically:YES];
+            NSLog(@"Saved index.js.md5 for future cache checks");
         }
 
         if (configData && !configError) {
