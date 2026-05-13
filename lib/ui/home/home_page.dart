@@ -715,16 +715,16 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
               );
             } else if (currentSiteKey == 'nodejs_baseset') {
               // 配置中心线路，根据内容判断行为
-              log('[分类内容] ⚙️ 配置中心线路，检查内容: ${video.name}, pic=${video.pic}');
+              log('[分类内容] ⚙️ 配置中心线路，检查内容: ${video.name}, cover=${video.cover}');
               
-              // 如果有pic字段且包含URL，尝试解析并打开
-              if (video.pic != null && video.pic!.isNotEmpty && video.pic!.startsWith('http')) {
-                log('[分类内容] 🎨 配置中心检测到链接: ${video.pic}');
+              // 如果有cover字段且包含URL，尝试解析并打开
+              if (video.cover.isNotEmpty && video.cover.startsWith('http')) {
+                log('[分类内容] 🎨 配置中心检测到链接: ${video.cover}');
                 // 尝试直接打开这个链接
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => _WebViewPage(url: video.pic!, title: video.name),
+                    builder: (context) => _WebViewPage(url: video.cover, title: video.name),
                   ),
                 );
               } else {
