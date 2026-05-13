@@ -111,36 +111,14 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
       _controller = null;
     }
     
+    // 使用最简单的配置，提高兼容性
     _controller = VlcPlayerController.network(
       url,
       autoPlay: true,
+      hwAcc: HwAcc.auto,
       options: VlcPlayerOptions(
-        video: VlcVideoOptions([
-          '--network-caching=15000',
-          '--file-caching=15000',
-          '--live-caching=15000',
-          '--avformat-options',
-          'fflags=nogenpts',
-          if (isM3U8) '--hls-live-edge=3',
-          if (isM3U8) '--hls-segment-threads=1',
-        ]),
-        audio: VlcAudioOptions([
-          '--network-caching=15000',
-        ]),
-        subtitle: VlcSubtitleOptions([]),
         http: VlcHttpOptions([
-          '--http-user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-          '--http-referrer=https://vip.123pan.cn/',
-          '--http-continuous-flow',
-          '--http-connect-timeout=10',
-          '--http-max-connections=3',
-        ]),
-        rtp: VlcRtpOptions([]),
-        advanced: VlcAdvancedOptions([
-          '--avcodec-threads=1',
-          '--clock-jitter=0',
-          '--clock-synchro=0',
-          '--sout-mux-caching=15000',
+          '--http-user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         ]),
       ),
     );
@@ -152,26 +130,6 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
     // 设置倍速
     await _controller!.setPlaybackSpeed(widget.playbackSpeed);
     log('[VLC播放器] ⚡ 设置倍速: ${widget.playbackSpeed}x');
-    
-    await Future.delayed(const Duration(seconds: 2));
-    
-    if (mounted && _controller != null) {
-      final isPlaying = _controller!.value.isPlaying;
-      final duration = _controller!.value.duration.inMilliseconds.toDouble();
-      log('[VLC播放器] 📊 初始状态检查: isPlaying=$isPlaying, duration=$duration');
-      
-      if (!isPlaying && !_controller!.value.hasError && _retryCount < _maxRetries) {
-        _retryCount++;
-        log('[VLC播放器] 🔄 尝试重新播放 (第$_retryCount次)...');
-        await _controller!.play();
-        await Future.delayed(const Duration(seconds: 3));
-        
-        if (mounted && _controller != null) {
-          final retryIsPlaying = _controller!.value.isPlaying;
-          log('[VLC播放器] 📊 重试后状态: isPlaying=$retryIsPlaying');
-        }
-      }
-    }
   }
 
   @override

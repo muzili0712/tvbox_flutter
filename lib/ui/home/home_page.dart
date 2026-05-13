@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:tvbox_flutter/services/log_service.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/providers/source_provider.dart';
@@ -351,6 +352,95 @@ class _CategoryContentLoader extends StatefulWidget {
       _CategoryContentLoaderState();
 }
 
+class _WebViewPage extends StatefulWidget {
+  final String url;
+  final String title;
+  
+  const _WebViewPage({required this.url, required this.title});
+
+  @override
+  State<_WebViewPage> createState() => _WebViewPageState();
+}
+
+class _WebViewPageState extends State<_WebViewPage> {
+  late final WebViewController _controller;
+  bool _isLoading = true;
+  double _progress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            setState(() {
+              _progress = progress / 100;
+            });
+          },
+          onPageStarted: (String url) {
+            setState(() {
+              _isLoading = true;
+            });
+          },
+          onPageFinished: (String url) {
+            setState(() {
+              _isLoading = false;
+            });
+          },
+          onHttpError: (HttpResponseError error) {
+            print('HTTP error: $error');
+          },
+          onWebResourceError: (WebResourceError error) {
+            print('Web resource error: $error');
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              _controller.reload();
+            },
+            tooltip: '刷新',
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_isLoading)
+            Container(
+              color: Colors.white.withOpacity(0.8),
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+          if (_isLoading && _progress > 0 && _progress < 1)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                value: _progress,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CategoryContentLoaderState extends State<_CategoryContentLoader>
     with AutomaticKeepAliveClientMixin {
   List<VideoItem> _videos = [];
@@ -624,14 +714,29 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
                 ),
               );
             } else if (currentSiteKey == 'nodejs_baseset') {
-              // 配置中心线路，打开Web配置页面
-              log('[分类内容] ⚙️ 配置中心线路，打开Web配置页面');
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const WebConfigPage(),
-                ),
-              );
+              // 配置中心线路，根据内容判断行为
+              log('[分类内容] ⚙️ 配置中心线路，检查内容: ${video.name}, pic=${video.pic}');
+              
+              // 如果有pic字段且包含URL，尝试解析并打开
+              if (video.pic != null && video.pic!.isNotEmpty && video.pic!.startsWith('http')) {
+                log('[分类内容] 🎨 配置中心检测到链接: ${video.pic}');
+                // 尝试直接打开这个链接
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => _WebViewPage(url: video.pic!, title: video.name),
+                  ),
+                );
+              } else {
+                // 默认打开配置页面
+                log('[分类内容] ⚙️ 配置中心线路，打开Web配置页面');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const WebConfigPage(),
+                  ),
+                );
+              }
             } else {
               // 正常处理
               log('[分类内容] 🎬 正常跳转到详情页: ${video.name}, id=${video.id}');

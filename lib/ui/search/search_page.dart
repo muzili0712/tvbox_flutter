@@ -112,8 +112,8 @@ class _SearchPageState extends State<SearchPage> {
         
         log('[搜索] 🔍 有效线路数量: ${validSites.length}');
         
-        // 最多搜索前5个站点
-        final sitesToSearch = validSites.take(5).toList();
+        // 搜索前20个站点
+        final sitesToSearch = validSites.take(20).toList();
         
         // 并发搜索所有站点
         final futures = sitesToSearch
@@ -127,14 +127,8 @@ class _SearchPageState extends State<SearchPage> {
           allResults.addAll(videos);
         }
         
-        // 去重（根据名称和id）
-        final seen = <String>{};
-        allResults = allResults.where((video) {
-          final key = '${video.name}_${video.id}';
-          if (seen.contains(key)) return false;
-          seen.add(key);
-          return true;
-        }).toList();
+        // 暂时不做去重，保留所有搜索结果
+        log('[搜索] 🔍 合并后总结果数: ${allResults.length}');
         
       } else {
         // 搜索单个站点
