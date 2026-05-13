@@ -40,6 +40,57 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
+  Future<List<VideoItem>> _searchSingleSite(
+      Map<String, dynamic> site, String keyword) async {
+    try {
+      final key = (site['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
+      final type = site['type'] as int? ?? 3;
+      final api = site['api'] as String? ?? '';
+      final siteName = site['name'] as String? ?? key;
+      
+      log('[搜索] 🔍 开始搜索 $siteName');
+      
+      NodeJSService.instance.setCurrentSpider(key, type, apiBase: api);
+      await NodeJSService.instance.initSpider();
+      
+      final result = await NodeJSService.instance.search(keyword: keyword);
+      final list = result['list'] as List<dynamic>? ?? [];
+      
+      log('[搜索] 🔍 $siteName 返回 ${list.length} 条结果');
+      
+      final videos = list
+          .map((json) => VideoItem.fromJson(json as Map<String, dynamic>))
+          .toList();
+      
+      // 本地关键词过滤
+      return _filterSearchResults(videos, keyword);
+    } catch (e) {
+      log('[搜索] ❌ $e');
+      return [];
+    }
+  }
+  
+  List<VideoItem> _filterSearchResults(List<VideoItem> videos, String keyword) {
+    if (keyword.isEmpty) return videos;
+    
+    final tokens = keyword
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    
+    if (tokens.isEmpty) return videos;
+    
+    return videos.where((video) {
+      final searchableText = [
+        video.name,
+        video.remark ?? '',
+      ].join(' ').toLowerCase();
+      
+      return tokens.every((token) => searchableText.contains(token));
+    }).toList();
+  }
+
   Future<void> _search() async {
     final keyword = _controller.text.trim();
     if (keyword.isEmpty) return;
@@ -50,9 +101,9 @@ class _SearchPageState extends State<SearchPage> {
       List<VideoItem> allResults = [];
       final provider = Provider.of<SourceProvider>(context, listen: false);
 
-      // 如果是搜索全部或者没有选择特定站点，遍历非豆瓣的站点搜索
       if (_selectedSite == null) {
-        log('[搜索] 🔍 搜索全部线路');
+        log('[搜索] 🔍 并发搜索全部线路');
+        
         // 筛选出正常的影视站点（排除豆瓣和配置中心）
         final validSites = provider.sites.where((site) {
           final key = site['key'] as String? ?? '';
@@ -61,35 +112,19 @@ class _SearchPageState extends State<SearchPage> {
         
         log('[搜索] 🔍 有效线路数量: ${validSites.length}');
         
-        // 最多搜索前5个站点避免耗时太长
+        // 最多搜索前5个站点
         final sitesToSearch = validSites.take(5).toList();
         
-        for (final site in sitesToSearch) {
-          try {
-            final key = (site['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
-            final type = site['type'] as int? ?? 3;
-            final api = site['api'] as String? ?? '';
-            final siteName = site['name'] as String? ?? key;
-            
-            log('[搜索] 🔍 搜索 $siteName');
-            
-            NodeJSService.instance.setCurrentSpider(key, type, apiBase: api);
-            await NodeJSService.instance.initSpider();
-            
-            final result = await NodeJSService.instance.search(keyword: keyword);
-            final list = result['list'] as List<dynamic>? ?? [];
-            
-            log('[搜索] 🔍 $siteName 返回 ${list.length} 条结果');
-            
-            for (final json in list) {
-              final video = VideoItem.fromJson(json as Map<String, dynamic>);
-              allResults.add(video);
-            }
-          } catch (e) {
-            log('[搜索] ❌ 搜索失败: $e');
-            // 继续搜索下一个站点
-            continue;
-          }
+        // 并发搜索所有站点
+        final futures = sitesToSearch
+            .map((site) => _searchSingleSite(site, keyword))
+            .toList();
+        
+        final results = await Future.wait(futures);
+        
+        // 合并所有结果
+        for (final videos in results) {
+          allResults.addAll(videos);
         }
         
         // 去重（根据名称和id）
@@ -103,17 +138,7 @@ class _SearchPageState extends State<SearchPage> {
         
       } else {
         // 搜索单个站点
-        final key = (_selectedSite!['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
-        final type = _selectedSite!['type'] as int? ?? 3;
-        final api = _selectedSite!['api'] as String? ?? '';
-        NodeJSService.instance.setCurrentSpider(key, type, apiBase: api);
-        await NodeJSService.instance.initSpider();
-
-        final result = await NodeJSService.instance.search(keyword: keyword);
-        final list = result['list'] as List<dynamic>? ?? [];
-        allResults = list
-            .map((json) => VideoItem.fromJson(json as Map<String, dynamic>))
-            .toList();
+        allResults = await _searchSingleSite(_selectedSite!, keyword);
       }
 
       log('[搜索] 🔍 共找到 ${allResults.length} 条结果');
