@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
 import 'package:tvbox_flutter/providers/player_provider.dart';
 import 'package:tvbox_flutter/models/video_detail.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
@@ -30,7 +29,7 @@ class VideoPlayerPage extends StatefulWidget {
 
 class _VideoPlayerPageState extends State<VideoPlayerPage> {
   late PlayerType _currentPlayer;
-  bool _isLoading = true;
+  bool _isLoading = false;
   bool _showControls = true;
   double _currentPosition = 0;
   double _duration = 0;
@@ -44,15 +43,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     _currentPlayer = Provider.of<PlayerProvider>(context, listen: false).defaultPlayer;
     _currentEpisodeIndex = widget.initialEpisodeIndex;
     _currentSourceIndex = widget.initialSourceIndex;
-    setState(() => _isLoading = false);
   }
 
   void _changePlayer(PlayerType player) {
     setState(() {
       _currentPlayer = player;
-      _isLoading = true;
+      _isLoading = false;
     });
-    _loadVideo();
   }
 
   Future<void> _changeEpisode(int index) async {
@@ -156,7 +153,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         // 使用原 URL
       }
     }
-    
+
     switch (_currentPlayer) {
       case PlayerType.vlc:
         return VlcPlayerWidget(
@@ -239,7 +236,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
               Expanded(
                 child: Slider(
                   value: _currentPosition,
-                  max: _duration,
+                  max: _duration > 0 ? _duration : 1,
                   onChanged: (value) {},
                   activeColor: Colors.blue,
                   inactiveColor: Colors.white30,
