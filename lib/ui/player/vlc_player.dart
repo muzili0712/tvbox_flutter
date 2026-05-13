@@ -44,7 +44,7 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
       log('[VLC播放器] 🔍 检测到数组格式，尝试解析...');
       try {
         // 尝试从数组中提取 URL
-        RegExp urlRegex = RegExp(r"(https?://[^\s,'\"]+)");
+        RegExp urlRegex = RegExp('(https?://[^\\s,\'"]+)');
         Iterable<RegExpMatch> matches = urlRegex.allMatches(widget.url);
         if (matches.isNotEmpty) {
           // 取最后一个匹配的 URL，通常是真实播放地址
