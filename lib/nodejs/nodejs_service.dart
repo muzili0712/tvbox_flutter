@@ -506,24 +506,37 @@ class NodeJSService {
       log('[ getCategoryContent] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
       return {};
     }
-    try {
-      final url = '${_spiderBaseUrl()}${_spiderPath()}/category';
-      log('[ getCategoryContent] 📡 POST $url body={"id":"$categoryId","page":$page, "filters":$filters}');
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'id': categoryId,
-          'page': page,
-          'filters': filters,
-        }),
-      ).timeout(const Duration(seconds: 15));
-      log('[ getCategoryContent] 📡 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+    
+    // 重试机制
+    for (int retry = 0; retry < 3; retry++) {
+      try {
+        final url = '${_spiderBaseUrl()}${_spiderPath()}/category';
+        log('[ getCategoryContent] 📡 POST $url body={"id":"$categoryId","page":$page, "filters":$filters}${retry > 0 ? ' (重试 $retry)' : ''}');
+        final response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'id': categoryId,
+            'page': page,
+            'filters': filters,
+          }),
+        ).timeout(const Duration(seconds: 15));
+        log('[ getCategoryContent] 📡 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
+        if (response.statusCode == 200) {
+          return jsonDecode(response.body) as Map<String, dynamic>;
+        }
+        break;
+      } on TimeoutException catch (e) {
+        log('[ getCategoryContent] ⏱️ 超时 (尝试 ${retry + 1}/3): $e');
+        if (retry < 2) {
+          await Future.delayed(Duration(seconds: 1 + retry));
+          continue;
+        }
+        log('[ getCategoryContent] ❌ 重试次数用尽');
+      } catch (e) {
+        log('[ getCategoryContent] ❌ 错误: $e');
+        break;
       }
-    } catch (e) {
-      log('[ getCategoryContent] ❌ 错误: $e');
     }
     return {};
   }
@@ -595,23 +608,36 @@ class NodeJSService {
       log('[ search] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
       return {};
     }
-    try {
-      final url = '${_spiderBaseUrl()}${_spiderPath()}/search';
-      log('[ search] 🔍 POST $url body={"wd":"$keyword","page":$page}');
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'wd': keyword,
-          'page': page,
-        }),
-      ).timeout(const Duration(seconds: 15));
-      log('[ search] 🔍 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+    
+    // 重试机制
+    for (int retry = 0; retry < 3; retry++) {
+      try {
+        final url = '${_spiderBaseUrl()}${_spiderPath()}/search';
+        log('[ search] 🔍 POST $url body={"wd":"$keyword","page":$page}${retry > 0 ? ' (重试 $retry)' : ''}');
+        final response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'wd': keyword,
+            'page': page,
+          }),
+        ).timeout(const Duration(seconds: 15));
+        log('[ search] 🔍 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
+        if (response.statusCode == 200) {
+          return jsonDecode(response.body) as Map<String, dynamic>;
+        }
+        break;
+      } on TimeoutException catch (e) {
+        log('[ search] ⏱️ 超时 (尝试 ${retry + 1}/3): $e');
+        if (retry < 2) {
+          await Future.delayed(Duration(seconds: 1 + retry));
+          continue;
+        }
+        log('[ search] ❌ 重试次数用尽');
+      } catch (e) {
+        log('[ search] ❌ 错误: $e');
+        break;
       }
-    } catch (e) {
-      log('[ search] ❌ 错误: $e');
     }
     return {};
   }

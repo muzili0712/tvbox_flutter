@@ -580,21 +580,36 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
             final values = filter['value'] as List<dynamic>?;
             
             if (key != null) {
+              String? filterValue;
+              
+              // 优先使用 init 值
               if (init != null && init.toString().isNotEmpty) {
-                filterParams[key] = init;
-                log('[分类内容] ✅ 使用init值: $key=$init');
+                filterValue = init.toString();
+                log('[分类内容] ✅ 使用init值: $key=$filterValue');
               } else if (values != null && values.isNotEmpty) {
-                final firstValue = values.first;
-                if (firstValue is Map && firstValue['v'] != null) {
-                  filterParams[key] = firstValue['v'];
-                  log('[分类内容] ✅ 使用第一个可选值: $key=${firstValue['v']}');
-                } else if (firstValue is Map && firstValue['value'] != null) {
-                  filterParams[key] = firstValue['value'];
-                  log('[分类内容] ✅ 使用第一个可选值(value字段): $key=${firstValue['value']}');
-                } else {
-                  filterParams[key] = firstValue;
-                  log('[分类内容] ✅ 使用第一个原始值: $key=$firstValue');
+                // 从 values 中获取第一个有效值
+                for (final v in values) {
+                  if (v is Map) {
+                    final vv = v['v']?.toString() ?? v['value']?.toString();
+                    if (vv != null && vv.isNotEmpty) {
+                      filterValue = vv;
+                      break;
+                    }
+                  } else if (v != null && v.toString().isNotEmpty) {
+                    filterValue = v.toString();
+                    break;
+                  }
                 }
+                if (filterValue != null) {
+                  log('[分类内容] ✅ 使用第一个可选值: $key=$filterValue');
+                }
+              }
+              
+              // 只有当值不为空时才添加到 filterParams
+              if (filterValue != null && filterValue.isNotEmpty) {
+                filterParams[key] = filterValue;
+              } else {
+                log('[分类内容] ⚠️ filter $key 没有有效值，跳过');
               }
             }
           }
