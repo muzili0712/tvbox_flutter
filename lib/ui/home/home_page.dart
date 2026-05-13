@@ -365,6 +365,68 @@ class _CategoryContentLoader extends StatefulWidget {
       _CategoryContentLoaderState();
 }
 
+class _ImageViewerPage extends StatelessWidget {
+  final String url;
+  final String title;
+  
+  const _ImageViewerPage({required this.url, required this.title});
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              log('[图片查看器] ❌ 加载失败: $error');
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.broken_image, size: 64, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text('图片加载失败', style: TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        // 尝试用WebView打开
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => _WebViewPage(url: url, title: title),
+                          ),
+                        );
+                      },
+                      child: const Text('用浏览器打开'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded / (loadingProgress.expectedTotalBytes ?? 1)
+                      : null,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _WebViewPage extends StatefulWidget {
   final String url;
   final String title;
@@ -793,16 +855,32 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
               // 配置中心线路，根据内容判断行为
               log('[分类内容] ⚙️ 配置中心线路，检查内容: ${video.name}, cover=${video.cover}');
               
-              // 如果有cover字段且包含URL，尝试解析并打开
+              // 如果有cover字段且包含URL，检查是图片还是网页
               if (video.cover.isNotEmpty && video.cover.startsWith('http')) {
                 log('[分类内容] 🎨 配置中心检测到链接: ${video.cover}');
-                // 尝试直接打开这个链接
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => _WebViewPage(url: video.cover, title: video.name),
-                  ),
-                );
+                
+                // 判断是否是图片
+                final isImage = video.cover.toLowerCase().contains(RegExp(r'\.(png|jpg|jpeg|gif|webp|bmp)(\?|$)')) || 
+                               video.name.contains('扫码') || 
+                               video.name.contains('二维码');
+                
+                if (isImage) {
+                  // 显示图片
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => _ImageViewerPage(url: video.cover, title: video.name),
+                    ),
+                  );
+                } else {
+                  // 打开网页
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => _WebViewPage(url: video.cover, title: video.name),
+                    ),
+                  );
+                }
               } else {
                 // 默认打开配置页面
                 log('[分类内容] ⚙️ 配置中心线路，打开Web配置页面');

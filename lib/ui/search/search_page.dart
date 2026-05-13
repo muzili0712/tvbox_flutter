@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
-import 'package:tvbox_flutter/ui/widgets/video_card.dart';
-import 'package:tvbox_flutter/models/video_item.dart';
-import 'package:tvbox_flutter/ui/detail/detail_page.dart';
-import 'package:tvbox_flutter/providers/source_provider.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:tvbox_flutter/services/log_service.dart';
+import 'dart:async';
+import 'package:tvbox/providers/source_provider.dart';
+import 'package:tvbox/models/video_item.dart';
+import 'package:tvbox/nodejs/nodejs_service.dart';
+import 'package:tvbox/ui/detail/detail_page.dart';
 
 class SearchPage extends StatefulWidget {
   final String? initialSearch;
@@ -18,62 +16,142 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  final _controller = TextEditingController();
-  List<VideoItem> _results = [];
-  bool _isLoading = false;
-  Map<String, dynamic>? _selectedSite;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  bool _isSearching = false;
+  Map<String, List<VideoItem>> _resultsBySite = {};
+  Map<String, bool> _searchingStatus = {};
+  Map<String, int> _resultCount = {};
+  String? _selectedSiteKey;
+  Timer? _debounceTimer;
+  final Set<String> _activeSites = {};
+
+  void log(String message) {
+    print('[搜索] $message');
+  }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 默认设置为搜索全部
-      setState(() {
-        _selectedSite = null;
+    if (widget.initialSearch != null) {
+      _searchController.text = widget.initialSearch!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _performSearch(widget.initialSearch!);
       });
-      
-      // 如果有初始搜索词，自动执行搜索
-      if (widget.initialSearch != null && widget.initialSearch!.isNotEmpty) {
-        _controller.text = widget.initialSearch!;
-        _search();
-      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounceTimer != null) {
+      _debounceTimer!.cancel();
+    }
+    if (query.trim().isEmpty) {
+      setState(() {
+        _resultsBySite.clear();
+        _searchingStatus.clear();
+        _resultCount.clear();
+        _selectedSiteKey = null;
+      });
+      return;
+    }
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _performSearch(query.trim());
     });
   }
 
-  Future<List<VideoItem>> _searchSingleSite(
-      Map<String, dynamic> site, String keyword) async {
-    try {
-      final key = (site['key'] as String?)?.replaceFirst('nodejs_', '') ?? '';
-      final type = site['type'] as int? ?? 3;
-      final api = site['api'] as String? ?? '';
-      final siteName = site['name'] as String? ?? key;
+  Future<void> _performSearch(String keyword) async {
+    if (keyword.isEmpty) return;
+    
+    final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+    final sites = sourceProvider.allSites;
+    
+    // 筛选出正常的影视站点（排除豆瓣和配置中心）
+    final validSites = sites.where((site) {
+      final key = site['key']?.toString() ?? '';
+      return key.isNotEmpty && 
+             key != 'nodejs_douban' && 
+             key != 'nodejs_baseset';
+    }).toList();
+
+    log('[搜索] 🔍 有效线路数量: ${validSites.length}');
+    
+    setState(() {
+      _isSearching = true;
+      _resultsBySite.clear();
+      _searchingStatus.clear();
+      _resultCount.clear();
+      _activeSites.clear();
+    });
+
+    for (final site in validSites) {
+      final key = site['key']?.toString() ?? '';
+      if (key.isEmpty) continue;
       
-      log('[搜索] 🔍 开始搜索 $siteName');
+      setState(() {
+        _searchingStatus[key] = true;
+        _activeSites.add(key);
+      });
       
-      NodeJSService.instance.setCurrentSpider(key, type, apiBase: api);
-      await NodeJSService.instance.initSpider();
+      // 设置默认选中第一个
+      if (_selectedSiteKey == null) {
+        setState(() {
+          _selectedSiteKey = key;
+        });
+      }
       
-      final result = await NodeJSService.instance.search(keyword: keyword);
-      final list = result['list'] as List<dynamic>? ?? [];
-      
-      log('[搜索] 🔍 $siteName 返回 ${list.length} 条结果');
-      
-      final videos = list
-          .map((json) => VideoItem.fromJson(json as Map<String, dynamic>))
-          .toList();
-      
-      // 本地关键词过滤
-      return _filterSearchResults(videos, keyword);
-    } catch (e) {
-      log('[搜索] ❌ $e');
-      return [];
+      unawaited(_searchSingleSite(key, keyword, site));
     }
   }
-  
+
+  Future<void> _searchSingleSite(String siteKey, String keyword, Map<String, dynamic> site) async {
+    try {
+      final nodejsService = NodejsService();
+      
+      // 临时切换到该站点进行搜索
+      await nodejsService.setSpiderBySiteKey(siteKey);
+      
+      final result = await nodejsService.search(keyword: keyword, page: 1);
+      
+      if (!mounted) return;
+      
+      List<VideoItem> items = [];
+      if (result['list'] != null && result['list'] is List) {
+        items = (result['list'] as List).map((item) {
+          return VideoItem.fromJson(item as Map<String, dynamic>);
+        }).toList();
+      }
+      
+      log('[搜索] 🔍 ${site['name']} 返回 ${items.length} 条结果');
+      
+      // 过滤和排序
+      items = _filterSearchResults(items, keyword);
+      items = _sortByRelevance(items, keyword);
+      
+      setState(() {
+        _resultsBySite[siteKey] = items;
+        _resultCount[siteKey] = items.length;
+        _searchingStatus[siteKey] = false;
+      });
+    } catch (e) {
+      log('[搜索] ❌ ${site['name']} 搜索失败: $e');
+      if (!mounted) return;
+      setState(() {
+        _searchingStatus[siteKey] = false;
+      });
+    }
+  }
+
   List<VideoItem> _filterSearchResults(List<VideoItem> videos, String keyword) {
     if (keyword.isEmpty) return videos;
     
-    // 分词处理
     final tokens = _normalizeSearchText(keyword)
         .split(RegExp(r'\s+'))
         .where((t) => t.isNotEmpty)
@@ -94,13 +172,11 @@ class _SearchPageState extends State<SearchPage> {
       return tokens.every((token) => searchableText.contains(token));
     }).toList();
   }
-  
+
   String _normalizeSearchText(String text) {
-    // 去除空白字符、标点符号等，统一转为小写
     final buffer = StringBuffer();
     for (final char in text.runes) {
       final ch = String.fromCharCode(char);
-      // 只保留字母、数字和中文
       if (RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(ch)) {
         buffer.write(ch.toLowerCase());
       }
@@ -108,204 +184,287 @@ class _SearchPageState extends State<SearchPage> {
     return buffer.toString();
   }
 
-  Future<void> _search() async {
-    final keyword = _controller.text.trim();
-    if (keyword.isEmpty) return;
+  List<VideoItem> _sortByRelevance(List<VideoItem> videos, String keyword) {
+    final normalizedKeyword = _normalizeSearchText(keyword);
+    
+    videos.sort((a, b) {
+      final scoreA = _calculateRelevanceScore(a, normalizedKeyword);
+      final scoreB = _calculateRelevanceScore(b, normalizedKeyword);
+      return scoreB.compareTo(scoreA);
+    });
+    
+    return videos;
+  }
 
-    setState(() => _isLoading = true);
-
-    try {
-      List<VideoItem> allResults = [];
-      final provider = Provider.of<SourceProvider>(context, listen: false);
-
-      if (_selectedSite == null) {
-        log('[搜索] 🔍 并发搜索全部线路');
-        
-        // 筛选出正常的影视站点（排除豆瓣和配置中心）
-        final validSites = provider.sites.where((site) {
-          final key = site['key'] as String? ?? '';
-          return key != 'nodejs_douban' && key != 'nodejs_baseset';
-        }).toList();
-        
-        log('[搜索] 🔍 有效线路数量: ${validSites.length}');
-        
-        // 搜索前20个站点
-        final sitesToSearch = validSites.take(20).toList();
-        
-        // 并发搜索所有站点
-        final futures = sitesToSearch
-            .map((site) => _searchSingleSite(site, keyword))
-            .toList();
-        
-        final results = await Future.wait(futures);
-        
-        // 合并所有结果
-        for (final videos in results) {
-          allResults.addAll(videos);
-        }
-        
-        // 去重处理 - 基于视频名称和封面进行去重
-        final seen = <String>{};
-        final uniqueResults = <VideoItem>[];
-        for (final video in allResults) {
-          // 使用名称+封面的组合作为去重键
-          final key = '${video.name.toLowerCase()}|${video.cover}';
-          if (!seen.contains(key)) {
-            seen.add(key);
-            uniqueResults.add(video);
-          }
-        }
-        allResults = uniqueResults;
-        
-        log('[搜索] 🔍 去重后结果数: ${allResults.length}');
-        
-      } else {
-        // 搜索单个站点
-        allResults = await _searchSingleSite(_selectedSite!, keyword);
-      }
-
-      log('[搜索] 🔍 共找到 ${allResults.length} 条结果');
-      
-      setState(() {
-        _results = allResults;
-      });
-    } catch (e) {
-      log('[搜索] ❌ 搜索错误: $e');
-    } finally {
-      setState(() => _isLoading = false);
+  int _calculateRelevanceScore(VideoItem video, String keyword) {
+    int score = 0;
+    final name = _normalizeSearchText(video.name);
+    
+    // 名称完全匹配
+    if (name == keyword) {
+      score += 1000;
     }
+    // 名称开头匹配
+    else if (name.startsWith(keyword)) {
+      score += 500;
+    }
+    // 名称包含
+    else if (name.contains(keyword)) {
+      score += 100;
+    }
+    
+    // 多词匹配
+    final tokens = keyword.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    for (final token in tokens) {
+      if (name.contains(token)) {
+        score += 50;
+      }
+    }
+    
+    return score;
   }
 
   @override
   Widget build(BuildContext context) {
+    final sourceProvider = Provider.of<SourceProvider>(context, listen: true);
+    
     return Scaffold(
       appBar: AppBar(
-        leading: Consumer<SourceProvider>(
-          builder: (context, provider, _) {
-            if (provider.sites.isEmpty) {
-              return const SizedBox.shrink();
-            }
-            return PopupMenuButton<Map<String, dynamic>>(
-              icon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.search, size: 20),
-                  SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      _selectedSite?['name'] ?? '全部线路',
-                      style: TextStyle(fontSize: 12),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              tooltip: '选择搜索线路',
-              onSelected: (site) {
-                setState(() {
-                  _selectedSite = site;
-                });
-                if (_controller.text.trim().isNotEmpty) {
-                  _search();
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem<Map<String, dynamic>>(
-                  value: null,
-                  child: Row(
-                    children: [
-                      Icon(
-                        _selectedSite == null ? Icons.check_circle : Icons.radio_button_unchecked,
-                        color: _selectedSite == null ? Colors.green : null,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text('搜索全部（前5条线路）'),
-                    ],
-                  ),
-                ),
-                ...provider.sites.map((site) {
-                  final key = site['key'] as String? ?? '';
-                  final name = site['name'] as String? ?? key;
-                  final isCurrent = _selectedSite?['key'] == key;
-                  return PopupMenuItem<Map<String, dynamic>>(
-                    value: site,
-                    child: Row(
-                      children: [
-                        Icon(
-                          isCurrent ? Icons.check_circle : Icons.radio_button_unchecked,
-                          color: isCurrent ? Colors.green : null,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(name)),
-                      ],
-                    ),
-                  );
-                }),
-              ],
-            );
-          },
-        ),
         title: TextField(
-          controller: _controller,
-          decoration: const InputDecoration(
-            hintText: '搜索影视...',
+          controller: _searchController,
+          focusNode: _searchFocus,
+          autofocus: widget.initialSearch == null,
+          decoration: InputDecoration(
+            hintText: '搜索影片...',
+            hintStyle: TextStyle(color: Colors.grey[400]),
             border: InputBorder.none,
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        _resultsBySite.clear();
+                        _searchingStatus.clear();
+                        _resultCount.clear();
+                        _selectedSiteKey = null;
+                      });
+                    },
+                  )
+                : null,
           ),
-          textInputAction: TextInputAction.search,
-          onSubmitted: (_) => _search(),
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+          onSubmitted: (value) {
+            _performSearch(value.trim());
+          },
+          onChanged: _onSearchChanged,
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: _search,
+            onPressed: () => _performSearch(_searchController.text.trim()),
           ),
         ],
       ),
-      body: _buildBody(),
+      body: Row(
+        children: [
+          // 左侧线路列表
+          Container(
+            width: 180,
+            decoration: BoxDecoration(
+              color: Colors.grey[900],
+              border: Border(right: BorderSide(color: Colors.grey[800]!)),
+            ),
+            child: _buildSiteList(sourceProvider),
+          ),
+          // 右侧搜索结果
+          Expanded(
+            child: _buildResultsContent(),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) {
+  Widget _buildSiteList(SourceProvider sourceProvider) {
+    final sites = sourceProvider.allSites.where((site) {
+      final key = site['key']?.toString() ?? '';
+      return key.isNotEmpty && 
+             key != 'nodejs_douban' && 
+             key != 'nodejs_baseset';
+    }).toList();
+    
+    if (sites.isEmpty && _activeSites.isEmpty) {
       return const Center(
-        child: SpinKitFadingCircle(
-          color: Colors.blue,
-          size: 50.0,
+        child: Text('暂无线路', style: TextStyle(color: Colors.grey)),
+      );
+    }
+    
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _activeSites.length,
+      itemBuilder: (context, index) {
+        // 查找对应的站点信息
+        final key = _activeSites.elementAt(index);
+        final site = sites.firstWhere((s) => s['key'] == key, orElse: () => {'name': key, 'key': key});
+        final isSelected = _selectedSiteKey == key;
+        final isSearching = _searchingStatus[key] ?? false;
+        final count = _resultCount[key] ?? 0;
+        
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.3) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: isSelected ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1) : null,
+          ),
+          child: ListTile(
+            dense: true,
+            title: Text(
+              site['name']?.toString() ?? key,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey[300],
+                fontSize: 13,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Row(
+              children: [
+                if (isSearching)
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey[400]),
+                  ),
+                if (isSearching) const SizedBox(width: 6),
+                Text(
+                  isSearching ? '搜索中...' : '$count 条结果',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                ),
+              ],
+            ),
+            onTap: () {
+              setState(() {
+                _selectedSiteKey = key;
+              });
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildResultsContent() {
+    if (_selectedSiteKey == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search, size: 64, color: Colors.grey[600]),
+            const SizedBox(height: 16),
+            Text('请输入搜索关键词', style: TextStyle(color: Colors.grey[500])),
+          ],
         ),
       );
     }
-
-    if (_results.isEmpty) {
-      return const Center(
-        child: Text('输入关键词开始搜索'),
+    
+    final results = _resultsBySite[_selectedSiteKey] ?? [];
+    final isSearching = _searchingStatus[_selectedSiteKey] ?? false;
+    
+    if (isSearching && results.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    if (results.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 64, color: Colors.grey[600]),
+            const SizedBox(height: 16),
+            Text('暂无搜索结果', style: TextStyle(color: Colors.grey[500])),
+          ],
+        ),
       );
     }
-
+    
     return GridView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+        crossAxisCount: 4,
         childAspectRatio: 0.7,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
-      itemCount: _results.length,
+      itemCount: results.length,
       itemBuilder: (context, index) {
-        final video = _results[index];
-        return VideoCard(
-          video: video,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DetailPage(videoId: video.id),
-              ),
-            );
-          },
-        );
+        return _buildVideoCard(results[index]);
       },
+    );
+  }
+
+  Widget _buildVideoCard(VideoItem video) {
+    return Card(
+      elevation: 2,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DetailPage(videoId: video.id),
+            ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Image.network(
+                video.cover,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey[800],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    video.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (video.remark != null && video.remark!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        video.remark!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[400],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
