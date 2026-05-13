@@ -396,7 +396,10 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
       Map<String, dynamic> filterParams = {};
       List<dynamic>? filters = sourceProvider.filters[widget.typeId] as List<dynamic>?;
       
+      log('[分类内容] 🔍 调试 - filters.keys=${sourceProvider.filters.keys.toList()}, typeId=${widget.typeId}, typeIdType=${widget.typeId.runtimeType}');
+      
       if (filters != null && filters.isNotEmpty) {
+        log('[分类内容] 🔍 当前分类(${widget.typeId})有${filters.length}个filters');
         for (final filter in filters) {
           if (filter is Map<String, dynamic>) {
             final key = filter['key'] as String?;
@@ -406,15 +409,25 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
             if (key != null) {
               if (init != null && init.toString().isNotEmpty) {
                 filterParams[key] = init;
+                log('[分类内容] ✅ 使用init值: $key=$init');
               } else if (values != null && values.isNotEmpty) {
                 final firstValue = values.first;
                 if (firstValue is Map && firstValue['v'] != null) {
                   filterParams[key] = firstValue['v'];
+                  log('[分类内容] ✅ 使用第一个可选值: $key=${firstValue['v']}');
+                } else if (firstValue is Map && firstValue['value'] != null) {
+                  filterParams[key] = firstValue['value'];
+                  log('[分类内容] ✅ 使用第一个可选值(value字段): $key=${firstValue['value']}');
+                } else {
+                  filterParams[key] = firstValue;
+                  log('[分类内容] ✅ 使用第一个原始值: $key=$firstValue');
                 }
               }
             }
           }
         }
+      } else {
+        log('[分类内容] ⚠️ 当前分类(${widget.typeId})没有filters');
       }
       
       log('[分类内容] 📋 使用filters: $filterParams');
