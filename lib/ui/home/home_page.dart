@@ -632,9 +632,10 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
       
       List<dynamic>? filters = sourceProvider.filters[widget.typeId] as List<dynamic>?;
       Map<String, dynamic> filterParams = {};
+      bool shouldTryEmptyFilters = false;
       
       if (filters != null && filters.isNotEmpty) {
-        log('[分类内容] 🔍 当前分类(${widget.typeId})有${filters.length}个filters');
+        log('[分类内容] 🔍 当前分类(${widget.typeId})有${filters.length}个filters, 完整filters: $filters');
         for (final filter in filters) {
           if (filter is Map<String, dynamic>) {
             final key = filter['key'] as String?;
@@ -676,6 +677,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
             }
           }
         }
+        shouldTryEmptyFilters = true;
       } else {
         log('[分类内容] ⚠️ 当前分类(${widget.typeId})没有filters');
       }
@@ -688,10 +690,22 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
         filters: filterParams,
       );
 
-      final list = result['list'] as List<dynamic>? ?? [];
+      var list = result['list'] as List<dynamic>? ?? [];
       final pagecount = result['pagecount'] as int? ?? 1;
 
       log('[分类内容] 📋 获取到${list.length}个视频, pagecount=$pagecount, currentPage=$_currentPage');
+
+      // 如果第一次返回空，尝试不传 filters
+      if (list.isEmpty && _currentPage == 1 && shouldTryEmptyFilters && filterParams.isNotEmpty) {
+        log('[分类内容] 🔄 第一次返回空，尝试不传任何 filters 重新加载');
+        final retryResult = await NodeJSService.instance.getCategoryContent(
+          categoryId: widget.typeId,
+          page: _currentPage,
+          filters: {},
+        );
+        list = retryResult['list'] as List<dynamic>? ?? [];
+        log('[分类内容] 📋 重试后获取到${list.length}个视频');
+      }
 
       final newVideos = list
           .map((json) =>
