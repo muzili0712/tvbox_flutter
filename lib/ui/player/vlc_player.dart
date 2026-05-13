@@ -24,10 +24,6 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
   @override
   void initState() {
     super.initState();
-    _initPlayer();
-  }
-
-  void _initPlayer() {
     _controller = VlcPlayerController.network(
       widget.url,
       autoPlay: true,
@@ -42,12 +38,6 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
     );
     
     _controller.addListener(_onPlayerStateChanged);
-    _controller.onInit.addListener(_onVlcInit);
-  }
-
-  void _onVlcInit() {
-    _controller.onInit.removeListener(_onVlcInit);
-    print('[VLC] Initialized, playing: ${widget.url.substring(0, widget.url.length > 80 ? 80 : widget.url.length)}...');
   }
 
   void _onPlayerStateChanged() {
@@ -70,7 +60,6 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
   @override
   void dispose() {
     _controller.removeListener(_onPlayerStateChanged);
-    _controller.onInit.removeListener(_onVlcInit);
     _controller.dispose();
     super.dispose();
   }
