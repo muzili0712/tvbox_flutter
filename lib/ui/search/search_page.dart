@@ -73,8 +73,8 @@ class _SearchPageState extends State<SearchPage> {
   List<VideoItem> _filterSearchResults(List<VideoItem> videos, String keyword) {
     if (keyword.isEmpty) return videos;
     
-    final tokens = keyword
-        .toLowerCase()
+    // 分词处理
+    final tokens = _normalizeSearchText(keyword)
         .split(RegExp(r'\s+'))
         .where((t) => t.isNotEmpty)
         .toList();
@@ -82,13 +82,30 @@ class _SearchPageState extends State<SearchPage> {
     if (tokens.isEmpty) return videos;
     
     return videos.where((video) {
-      final searchableText = [
+      final searchableText = _normalizeSearchText([
         video.name,
         video.remark ?? '',
-      ].join(' ').toLowerCase();
+        video.actor ?? '',
+        video.director ?? '',
+        video.area ?? '',
+        video.year ?? '',
+      ].join(' '));
       
       return tokens.every((token) => searchableText.contains(token));
     }).toList();
+  }
+  
+  String _normalizeSearchText(String text) {
+    // 去除空白字符、标点符号等，统一转为小写
+    final buffer = StringBuffer();
+    for (final char in text.runes) {
+      final ch = String.fromCharCode(char);
+      // 只保留字母、数字和中文
+      if (RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(ch)) {
+        buffer.write(ch.toLowerCase());
+      }
+    }
+    return buffer.toString();
   }
 
   Future<void> _search() async {
@@ -127,8 +144,20 @@ class _SearchPageState extends State<SearchPage> {
           allResults.addAll(videos);
         }
         
-        // 暂时不做去重，保留所有搜索结果
-        log('[搜索] 🔍 合并后总结果数: ${allResults.length}');
+        // 去重处理 - 基于视频名称和封面进行去重
+        final seen = <String>{};
+        final uniqueResults = <VideoItem>[];
+        for (final video in allResults) {
+          // 使用名称+封面的组合作为去重键
+          final key = '${video.name.toLowerCase()}|${video.cover}';
+          if (!seen.contains(key)) {
+            seen.add(key);
+            uniqueResults.add(video);
+          }
+        }
+        allResults = uniqueResults;
+        
+        log('[搜索] 🔍 去重后结果数: ${allResults.length}');
         
       } else {
         // 搜索单个站点

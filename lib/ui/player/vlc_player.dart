@@ -111,16 +111,30 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
       _controller = null;
     }
     
-    // 使用最简单的配置，提高兼容性
+    // 提高兼容性的配置
+    final options = VlcPlayerOptions(
+      http: VlcHttpOptions([
+        '--http-user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        '--http-reconnect',
+      ]),
+      video: VlcVideoOptions([
+        '--avcodec-hw=auto',
+      ]),
+      advanced: VlcAdvancedOptions([
+        '--no-osd',
+        '--no-stats',
+        '--quiet',
+        '--network-caching=3000',
+        '--live-caching=3000',
+        '--file-caching=3000',
+      ]),
+    );
+    
     _controller = VlcPlayerController.network(
       url,
       autoPlay: true,
-      hwAcc: HwAcc.auto,
-      options: VlcPlayerOptions(
-        http: VlcHttpOptions([
-          '--http-user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        ]),
-      ),
+      hwAcc: HwAcc.full,
+      options: options,
     );
 
     _controller!.addListener(_onPlayerStateChanged);
@@ -128,8 +142,12 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
     setState(() {});
     
     // 设置倍速
-    await _controller!.setPlaybackSpeed(widget.playbackSpeed);
-    log('[VLC播放器] ⚡ 设置倍速: ${widget.playbackSpeed}x');
+    try {
+      await _controller!.setPlaybackSpeed(widget.playbackSpeed);
+      log('[VLC播放器] ⚡ 设置倍速: ${widget.playbackSpeed}x');
+    } catch (e) {
+      log('[VLC播放器] ⚠️ 设置倍速失败: $e');
+    }
   }
 
   @override

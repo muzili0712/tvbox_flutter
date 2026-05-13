@@ -93,6 +93,16 @@ class _HomeContentState extends State<HomeContent>
     super.dispose();
   }
 
+  void _safeUpdateTabController(int newLength) {
+    if (_tabController.length != newLength) {
+      if (mounted) {
+        final oldController = _tabController;
+        _tabController = TabController(length: newLength, vsync: this);
+        oldController.dispose();
+      }
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -144,14 +154,16 @@ class _HomeContentState extends State<HomeContent>
 
     if (sourceProvider.categories.isNotEmpty && mounted) {
       setState(() {
-        _tabController = TabController(
-          length: sourceProvider.categories.length,
-          vsync: this,
-        );
+        _safeUpdateTabController(sourceProvider.categories.length);
       });
       log('[主页] ✅ 首页TabBar已更新: ${sourceProvider.categories.length}个分类');
     } else {
       log('[主页] ⚠️ 没有分类数据，首页显示"内容未加载"');
+      if (mounted) {
+        setState(() {
+          _safeUpdateTabController(0);
+        });
+      }
     }
 
     setState(() => _isLoading = false);
@@ -180,12 +192,13 @@ class _HomeContentState extends State<HomeContent>
                 ),
                 onSelected: (site) {
                   provider.setCurrentSite(site).then((_) {
-                    if (provider.categories.isNotEmpty) {
+                    if (mounted) {
                       setState(() {
-                        _tabController = TabController(
-                          length: provider.categories.length,
-                          vsync: this,
-                        );
+                        if (provider.categories.isNotEmpty) {
+                          _safeUpdateTabController(provider.categories.length);
+                        } else {
+                          _safeUpdateTabController(0);
+                        }
                       });
                     }
                   });
@@ -367,12 +380,58 @@ class _WebViewPageState extends State<_WebViewPage> {
   bool _isLoading = true;
   double _progress = 0;
 
+  String _decodeUrlIfNeeded(String url) {
+    try {
+      // 尝试解析可能的 base64 编码的 URL
+      final uri = Uri.parse(url);
+      // 检查是否有 proxy 或其他参数包含 base64
+      if (uri.queryParameters.containsKey('url')) {
+        final encodedUrl = uri.queryParameters['url']!;
+        try {
+          // 尝试解码 base64
+          final decoded = Uri.decodeComponent(encodedUrl);
+          if (decoded.startsWith('http')) {
+            log('[WebView] 📝 解码到 URL: $decoded');
+            return decoded;
+          }
+        } catch (_) {
+          // 不是有效的 URL 编码，继续使用原始 URL
+        }
+      }
+      // 检查 URL 本身是否看起来像 base64
+      if (url.contains('/proxy/')) {
+        try {
+          final parts = url.split('/proxy/');
+          if (parts.length > 1) {
+            final encodedPart = parts.last;
+            // 尝试 base64 解码
+            final decoded = String.fromCharCodes(Uri.decodeComponent(encodedPart).runes);
+            if (decoded.startsWith('http')) {
+              log('[WebView] 📝 从 proxy 路径解码到 URL: $decoded');
+              return decoded;
+            }
+          }
+        } catch (_) {
+          // 解码失败，继续
+        }
+      }
+    } catch (_) {
+      // URL 解析失败，使用原始值
+    }
+    return url;
+  }
+
   @override
   void initState() {
     super.initState();
+    
+    final decodedUrl = _decodeUrlIfNeeded(widget.url);
+    log('[WebView] 🎬 加载 URL: $decodedUrl');
+    
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
+      ..setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1')
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (int progress) {
@@ -381,24 +440,26 @@ class _WebViewPageState extends State<_WebViewPage> {
             });
           },
           onPageStarted: (String url) {
+            log('[WebView] 🚀 页面开始加载: $url');
             setState(() {
               _isLoading = true;
             });
           },
           onPageFinished: (String url) {
+            log('[WebView] ✅ 页面加载完成: $url');
             setState(() {
               _isLoading = false;
             });
           },
           onHttpError: (HttpResponseError error) {
-            print('HTTP error: $error');
+            log('[WebView] ❌ HTTP 错误: $error');
           },
           onWebResourceError: (WebResourceError error) {
-            print('Web resource error: $error');
+            log('[WebView] ❌ Web 资源错误: ${error.description}, code: ${error.errorCode}');
           },
         ),
       )
-      ..loadRequest(Uri.parse(widget.url));
+      ..loadRequest(Uri.parse(decodedUrl));
   }
 
   @override
