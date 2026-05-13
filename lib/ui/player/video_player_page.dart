@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:async/async.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/services/log_service.dart';
 import 'package:tvbox_flutter/providers/player_provider.dart';
