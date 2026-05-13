@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 
 void log(String message) {
   LogService.instance.addLog(message);
-  debugPrint(message);
 }
 
 class LogService extends ChangeNotifier {

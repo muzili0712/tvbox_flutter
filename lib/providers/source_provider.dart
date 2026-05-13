@@ -86,12 +86,14 @@ class SourceProvider extends ChangeNotifier {
     try {
       final nodejs = NodeJSService.instance;
 
+      SourceConfig sourceToSave = source;
       if (source.sourceType == 'remote') {
         String url = source.url.trim();
         if (url.endsWith('.js.md5')) {
           url = url.substring(0, url.length - 4);
+          sourceToSave = source.copyWith(url: url);
         }
-        log('[INFO] ➕ 添加源: ${source.name}, url=$url');
+        log('[INFO] ➕ 添加源: ${sourceToSave.name}, url=$url');
         final success = await nodejs.loadSourceFromURL(url);
         if (!success) {
           _errorMessage = nodejs.lastErrorMessage ?? 'Failed to load remote source';
@@ -103,7 +105,8 @@ class SourceProvider extends ChangeNotifier {
         log('[INFO] ✅ 源加载成功: spiderPort=${nodejs.spiderPort}');
       }
 
-      _sources.add(source);
+      _sources.add(sourceToSave);
+      _currentSource = sourceToSave;
       await _saveSources();
 
       _currentSource = source;
@@ -156,7 +159,11 @@ class SourceProvider extends ChangeNotifier {
       if (!nodejs.hasSpiderServer) {
         _isLoading = true;
         notifyListeners();
-        final success = await nodejs.loadSourceFromURL(source.url);
+        String loadUrl = source.url;
+        if (loadUrl.endsWith('.js.md5')) {
+          loadUrl = loadUrl.substring(0, loadUrl.length - 4);
+        }
+        final success = await nodejs.loadSourceFromURL(loadUrl);
         if (success) {
           await loadHomeContent();
         }
@@ -276,8 +283,12 @@ class SourceProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      log('[INFO] 📡 正在从URL加载源: ${_currentSource!.url}');
-      final success = await nodejs.loadSourceFromURL(_currentSource!.url);
+      String loadUrl = _currentSource!.url;
+      if (loadUrl.endsWith('.js.md5')) {
+        loadUrl = loadUrl.substring(0, loadUrl.length - 4);
+      }
+      log('[INFO] 📡 正在从URL加载源: $loadUrl');
+      final success = await nodejs.loadSourceFromURL(loadUrl);
       log('[INFO] 📡 加载结果: $success, spiderPort=${nodejs.spiderPort}');
       if (success) {
         await loadHomeContent();

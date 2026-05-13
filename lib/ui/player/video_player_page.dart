@@ -6,6 +6,7 @@ import 'package:tvbox_flutter/models/video_detail.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:tvbox_flutter/ui/player/vlc_player.dart';
 import 'package:tvbox_flutter/ui/player/system_player.dart';
+import 'package:tvbox_flutter/utils/player_util.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 class VideoPlayerPage extends StatefulWidget {
@@ -37,6 +38,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   bool _isPlaying = false;
   late int _currentEpisodeIndex;
   late int _currentSourceIndex;
+  String _parsedUrl = '';
+  List<String> _urlSegments = [];
 
   @override
   void initState() {
@@ -44,7 +47,13 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     _currentPlayer = Provider.of<PlayerProvider>(context, listen: false).defaultPlayer;
     _currentEpisodeIndex = widget.initialEpisodeIndex;
     _currentSourceIndex = widget.initialSourceIndex;
-    log('[播放页] 🎬 初始化: player=$_currentPlayer, url=${widget.playUrl}, title=${widget.title}');
+    
+    final parsedResult = PlayerUtil.parsePlayUrl(widget.playUrl);
+    _parsedUrl = parsedResult.url;
+    _urlSegments = parsedResult.segments;
+    
+    log('[播放页] 🎬 初始化: player=$_currentPlayer, originalUrl=${widget.playUrl}, title=${widget.title}');
+    log('[播放页] 📝 URL解析结果: url=$_parsedUrl, segmentsCount=${_urlSegments.length}, quality=${parsedResult.quality}');
   }
 
   void _changePlayer(PlayerType player) {
@@ -147,10 +156,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   Widget _buildPlayer() {
+    if (_parsedUrl.isEmpty) {
+      return const Center(
+        child: Text('无法解析播放地址', style: TextStyle(color: Colors.white)),
+      );
+    }
+    
     switch (_currentPlayer) {
       case PlayerType.vlc:
         return VlcPlayerWidget(
-          url: widget.playUrl,
+          url: _parsedUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
               _isPlaying = isPlaying;
@@ -162,7 +177,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         );
       case PlayerType.system:
         return SystemPlayerWidget(
-          url: widget.playUrl,
+          url: _parsedUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
               _isPlaying = isPlaying;

@@ -102,8 +102,12 @@ class _HomeContentState extends State<HomeContent>
     if (sourceProvider.currentSource != null &&
         sourceProvider.currentSource!.sourceType == 'remote' &&
         !nodejs.hasSpiderServer) {
-      log('[主页] 🏠 Spider未启动，从URL加载: ${sourceProvider.currentSource!.url}');
-      final success = await nodejs.loadSourceFromURL(sourceProvider.currentSource!.url);
+      String loadUrl = sourceProvider.currentSource!.url;
+      if (loadUrl.endsWith('.js.md5')) {
+        loadUrl = loadUrl.substring(0, loadUrl.length - 4);
+      }
+      log('[主页] 🏠 Spider未启动，从URL加载: $loadUrl');
+      final success = await nodejs.loadSourceFromURL(loadUrl);
       log('[主页] 🏠 loadSourceFromURL结果: $success, spiderPort=${nodejs.spiderPort}');
       if (!success) {
         log('[主页] ❌ 加载源失败，停止加载首页');
