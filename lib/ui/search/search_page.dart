@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
-import 'package:tvbox/providers/source_provider.dart';
-import 'package:tvbox/models/video_item.dart';
-import 'package:tvbox/nodejs/nodejs_service.dart';
-import 'package:tvbox/ui/detail/detail_page.dart';
+import 'package:tvbox_flutter/providers/source_provider.dart';
+import 'package:tvbox_flutter/models/video_item.dart';
+import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
+import 'package:tvbox_flutter/ui/detail/detail_page.dart';
 
 class SearchPage extends StatefulWidget {
   final String? initialSearch;
