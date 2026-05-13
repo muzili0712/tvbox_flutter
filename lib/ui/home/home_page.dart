@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tvbox_flutter/services/log_service.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/providers/source_provider.dart';
 import 'package:tvbox_flutter/ui/widgets/video_card.dart';
@@ -88,31 +89,31 @@ class _HomeContentState extends State<HomeContent>
   }
 
   Future<void> _loadHomeData() async {
-    print('[主页] 🏠 开始加载首页数据...');
+    log('[主页] 🏠 开始加载首页数据...');
     setState(() => _isLoading = true);
 
     final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
 
     await sourceProvider.ensureLoaded();
-    print('[主页] 🏠 ensureLoaded完成: currentSource=${sourceProvider.currentSource?.name ?? "无"}, hasSpiderServer=${NodeJSService.instance.hasSpiderServer}');
+    log('[主页] 🏠 ensureLoaded完成: currentSource=${sourceProvider.currentSource?.name ?? "无"}, hasSpiderServer=${NodeJSService.instance.hasSpiderServer}');
 
     final nodejs = NodeJSService.instance;
 
     if (sourceProvider.currentSource != null &&
         sourceProvider.currentSource!.sourceType == 'remote' &&
         !nodejs.hasSpiderServer) {
-      print('[主页] 🏠 Spider未启动，从URL加载: ${sourceProvider.currentSource!.url}');
+      log('[主页] 🏠 Spider未启动，从URL加载: ${sourceProvider.currentSource!.url}');
       final success = await nodejs.loadSourceFromURL(sourceProvider.currentSource!.url);
-      print('[主页] 🏠 loadSourceFromURL结果: $success, spiderPort=${nodejs.spiderPort}');
+      log('[主页] 🏠 loadSourceFromURL结果: $success, spiderPort=${nodejs.spiderPort}');
       if (!success) {
-        print('[主页] ❌ 加载源失败，停止加载首页');
+        log('[主页] ❌ 加载源失败，停止加载首页');
         setState(() => _isLoading = false);
         return;
       }
     }
 
     await sourceProvider.loadHomeContent();
-    print('[主页] 🏠 loadHomeContent完成: categories=${sourceProvider.categories.length}');
+    log('[主页] 🏠 loadHomeContent完成: categories=${sourceProvider.categories.length}');
 
     if (sourceProvider.categories.isNotEmpty && mounted) {
       setState(() {
@@ -121,9 +122,9 @@ class _HomeContentState extends State<HomeContent>
           vsync: this,
         );
       });
-      print('[主页] ✅ 首页TabBar已更新: ${sourceProvider.categories.length}个分类');
+      log('[主页] ✅ 首页TabBar已更新: ${sourceProvider.categories.length}个分类');
     } else {
-      print('[主页] ⚠️ 没有分类数据，首页显示"内容未加载"');
+      log('[主页] ⚠️ 没有分类数据，首页显示"内容未加载"');
     }
 
     setState(() => _isLoading = false);
@@ -360,7 +361,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
     setState(() => _isLoading = true);
 
     try {
-      print('[分类内容] 📋 加载分类: typeId=${widget.typeId}, typeName=${widget.typeName}, siteKey=${widget.siteKey}, page=$_currentPage');
+      log('[分类内容] 📋 加载分类: typeId=${widget.typeId}, typeName=${widget.typeName}, siteKey=${widget.siteKey}, page=$_currentPage');
       await NodeJSService.instance.initSpider();
       final result = await NodeJSService.instance.getCategoryContent(
         categoryId: widget.typeId,
@@ -370,7 +371,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
       final list = result['list'] as List<dynamic>? ?? [];
       final pagecount = result['pagecount'] as int? ?? 1;
 
-      print('[分类内容] 📋 获取到${list.length}个视频, pagecount=$pagecount, currentPage=$_currentPage');
+      log('[分类内容] 📋 获取到${list.length}个视频, pagecount=$pagecount, currentPage=$_currentPage');
 
       final newVideos = list
           .map((json) =>
@@ -378,7 +379,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
           .toList();
 
       if (newVideos.isNotEmpty) {
-        print('[分类内容] 📋 第一个视频: name=${newVideos.first.name}, id=${newVideos.first.id}');
+        log('[分类内容] 📋 第一个视频: name=${newVideos.first.name}, id=${newVideos.first.id}');
       }
 
       setState(() {
@@ -392,7 +393,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
         _isLoading = false;
       });
     } catch (e) {
-      print('[分类内容] ❌ 加载失败: $e');
+      log('[分类内容] ❌ 加载失败: $e');
       setState(() => _isLoading = false);
     }
   }

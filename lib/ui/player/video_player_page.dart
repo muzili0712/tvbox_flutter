@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tvbox_flutter/services/log_service.dart';
 import 'package:tvbox_flutter/providers/player_provider.dart';
 import 'package:tvbox_flutter/models/video_detail.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
@@ -43,11 +44,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     _currentPlayer = Provider.of<PlayerProvider>(context, listen: false).defaultPlayer;
     _currentEpisodeIndex = widget.initialEpisodeIndex;
     _currentSourceIndex = widget.initialSourceIndex;
-    print('[播放页] 🎬 初始化: player=$_currentPlayer, url=${widget.playUrl}, title=${widget.title}');
+    log('[播放页] 🎬 初始化: player=$_currentPlayer, url=${widget.playUrl}, title=${widget.title}');
   }
 
   void _changePlayer(PlayerType player) {
-    print('[播放页] 🔄 切换播放器: $_currentPlayer -> $player');
+    log('[播放页] 🔄 切换播放器: $_currentPlayer -> $player');
     setState(() {
       _currentPlayer = player;
       _isLoading = false;
@@ -56,7 +57,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
 
   Future<void> _changeEpisode(int index) async {
     if (widget.videoDetail == null) return;
-    print('[播放页] 🔄 切换集数: $_currentEpisodeIndex -> $index');
+    log('[播放页] 🔄 切换集数: $_currentEpisodeIndex -> $index');
     setState(() {
       _currentEpisodeIndex = index;
       _isLoading = true;
@@ -70,7 +71,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         playId: episode.url,
       );
       final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
-      print('[播放页] 🔄 切换集数结果: playUrl=$playUrl');
+      log('[播放页] 🔄 切换集数结果: playUrl=$playUrl');
       if (playUrl.isEmpty || !mounted) return;
       Navigator.pushReplacement(
         context,
@@ -85,7 +86,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         ),
       );
     } catch (e) {
-      print('[播放页] ❌ 切换集数失败: $e');
+      log('[播放页] ❌ 切换集数失败: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('切换集数失败: $e')),

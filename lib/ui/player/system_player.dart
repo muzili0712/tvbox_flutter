@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:tvbox_flutter/services/log_service.dart';
 
 class SystemPlayerWidget extends StatefulWidget {
   final String url;
@@ -31,15 +32,15 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
   }
 
   void _initPlayer() {
-    print('[系统播放器] 🎬 初始化: url=${widget.url}');
+    log('[系统播放器] 🎬 初始化: url=${widget.url}');
     _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     
     _videoController!.initialize().then((_) {
       if (!mounted) return;
-      print('[系统播放器] ✅ 初始化成功！开始播放');
+      log('[系统播放器] ✅ 初始化成功！开始播放');
       setState(() {});
     }).catchError((error) {
-      print('[系统播放器] ❌ 初始化失败: $error');
+      log('[系统播放器] ❌ 初始化失败: $error');
       if (mounted) {
         setState(() {
           _hasError = true;
@@ -53,7 +54,7 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
       autoPlay: true,
       showControls: false,
       errorBuilder: (context, errorMessage) {
-        print('[系统播放器] ❌ Chewie错误: $errorMessage');
+        log('[系统播放器] ❌ Chewie错误: $errorMessage');
         return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -87,12 +88,12 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
     if (_videoController!.value.hasError && !_hasError) {
       _hasError = true;
       _errorMessage = _videoController!.value.errorDescription;
-      print('[系统播放器] ❌ 播放错误: $_errorMessage');
+      log('[系统播放器] ❌ 播放错误: $_errorMessage');
     }
     
     if (_videoController!.value.isPlaying && _hasError) {
       _hasError = false;
-      print('[系统播放器] ✅ 恢复播放');
+      log('[系统播放器] ✅ 恢复播放');
     }
     
     widget.onPlayerStateChanged(

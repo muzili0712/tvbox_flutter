@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:tvbox_flutter/services/log_service.dart';
 
 class NodeJSService {
   static const MethodChannel _channel = MethodChannel('com.tvbox/nodejs');
@@ -52,28 +53,28 @@ class NodeJSService {
                 _isNodeReady = true;
                 _readyCompleter?.complete();
               } else if (eventType == 'message') {
-                print('Node.js message: ${data['message']}');
+                log('Node.js message: ${data['message']}');
               }
             } else if (data.containsKey('port') && data.containsKey('type')) {
               final port = data['port'] as int;
               final type = data['type'] as String;
               if (type == 'management') {
                 _managementPort = port;
-                print('Management port received: $port');
+                log('Management port received: $port');
                 _managementPortCompleter?.complete();
               } else if (type == 'spider') {
                 _spiderPort = port;
-                print('Spider port received: $port');
+                log('Spider port received: $port');
                 _spiderPortCompleter?.complete();
               }
             }
           } catch (e) {
-            print('Event parse error: $e');
+            log('Event parse error: $e');
           }
         }
       },
       onError: (error) {
-        print('Event channel error: $error');
+        log('Event channel error: $error');
       },
     );
   }
@@ -93,7 +94,7 @@ class NodeJSService {
       if (_isInitialized) {
         final readyTimeout = Timer(const Duration(seconds: 15), () {
           if (_readyCompleter != null && !_readyCompleter!.isCompleted) {
-            print('Warning: Node.js ready signal timeout, proceeding anyway');
+            log('Warning: Node.js ready signal timeout, proceeding anyway');
             _readyCompleter!.complete();
           }
         });
@@ -103,7 +104,7 @@ class NodeJSService {
 
         final mgmtTimeout = Timer(const Duration(seconds: 15), () {
           if (_managementPortCompleter != null && !_managementPortCompleter!.isCompleted) {
-            print('Warning: Management port timeout, proceeding anyway');
+            log('Warning: Management port timeout, proceeding anyway');
             _managementPortCompleter!.complete();
           }
         });
@@ -112,27 +113,27 @@ class NodeJSService {
         mgmtTimeout.cancel();
       }
     } catch (e) {
-      print('Node.js initialization error: $e');
+      log('Node.js initialization error: $e');
       _isInitialized = false;
     }
   }
 
   Future<bool> loadSourceFromURL(String url) async {
     try {
-      print('=== loadSourceFromURL called with url: $url ===');
+      log('=== loadSourceFromURL called with url: $url ===');
       final result = await _channel.invokeMethod('loadSourceFromURL', {'url': url});
-      print('loadSourceFromURL result: $result');
+      log('loadSourceFromURL result: $result');
       if (result is Map && result['success'] == true) {
         await waitForSpiderPort();
         return true;
       }
       return false;
     } on PlatformException catch (e) {
-      print('PlatformException in loadSourceFromURL: ${e.message}, code: ${e.code}, details: ${e.details}');
+      log('PlatformException in loadSourceFromURL: ${e.message}, code: ${e.code}, details: ${e.details}');
       _lastErrorMessage = e.message ?? 'Unknown error';
       return false;
     } catch (e) {
-      print('loadSourceFromURL error: $e');
+      log('loadSourceFromURL error: $e');
       _lastErrorMessage = e.toString();
       return false;
     }
@@ -148,7 +149,7 @@ class NodeJSService {
     _spiderPortCompleter = Completer<void>();
     final timer = Timer(timeout, () {
       if (_spiderPortCompleter != null && !_spiderPortCompleter!.isCompleted) {
-        print('Warning: Spider port timeout');
+        log('Warning: Spider port timeout');
         _spiderPortCompleter!.complete();
       }
     });
@@ -164,7 +165,7 @@ class NodeJSService {
       _spiderApiBase = '';
       return result == true;
     } catch (e) {
-      print('deleteSource error: $e');
+      log('deleteSource error: $e');
       return false;
     }
   }
@@ -174,7 +175,7 @@ class NodeJSService {
       final result = await _channel.invokeMethod('getSourcePath');
       return result as String?;
     } catch (e) {
-      print('getSourcePath error: $e');
+      log('getSourcePath error: $e');
       return null;
     }
   }
@@ -185,15 +186,15 @@ class NodeJSService {
     }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/init';
-      print('[initSpider] POST $url');
+      log('[initSpider] POST $url');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({}),
       ).timeout(const Duration(seconds: 10));
-      print('[initSpider] status=${response.statusCode} body=${response.body}');
+      log('[initSpider] status=${response.statusCode} body=${response.body}');
     } catch (e) {
-      print('[initSpider] error: $e');
+      log('[initSpider] error: $e');
     }
   }
 
@@ -201,7 +202,7 @@ class NodeJSService {
     _currentSpiderKey = key;
     _currentSpiderType = type;
     _spiderApiBase = apiBase;
-    print('[ setCurrentSpider] 🔧 设置Spider: key=$key, type=$type, apiBase=$apiBase, spiderPath=${_spiderPath()}');
+    log('[ setCurrentSpider] 🔧 设置Spider: key=$key, type=$type, apiBase=$apiBase, spiderPath=${_spiderPath()}');
   }
 
   String get currentSpiderKey => _currentSpiderKey;
@@ -215,23 +216,23 @@ class NodeJSService {
 
   Future<Map<String, dynamic>> getCatConfig() async {
     if (_spiderPort <= 0) {
-      print('[getCatConfig] FAIL: spiderPort=$_spiderPort');
+      log('[getCatConfig] FAIL: spiderPort=$_spiderPort');
       return {};
     }
     try {
       final url = '${_spiderBaseUrl()}/config';
-      print('[getCatConfig] GET $url');
+      log('[getCatConfig] GET $url');
       final response = await http
           .get(Uri.parse(url))
           .timeout(const Duration(seconds: 10));
-      print('[getCatConfig] status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+      log('[getCatConfig] status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final videoSites = data['video']?['sites'] as List<dynamic>? ?? [];
         if (videoSites.isNotEmpty) {
           final firstSite = videoSites.first as Map<String, dynamic>;
           final api = firstSite['api'] as String? ?? '';
-          print('[getCatConfig] firstSite: key=${firstSite['key']}, name=${firstSite['name']}, api=$api');
+          log('[getCatConfig] firstSite: key=${firstSite['key']}, name=${firstSite['name']}, api=$api');
           if (api.isNotEmpty) {
             _spiderApiBase = api;
           }
@@ -239,7 +240,7 @@ class NodeJSService {
         return data;
       }
     } catch (e) {
-      print('[getCatConfig] error: $e');
+      log('[getCatConfig] error: $e');
     }
     return {};
   }
@@ -475,23 +476,23 @@ class NodeJSService {
 
   Future<Map<String, dynamic>> getHomeContent() async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
-      print('[getHomeContent] FAIL: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      log('[getHomeContent] FAIL: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
       return {};
     }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/home';
-      print('[getHomeContent] POST $url');
+      log('[getHomeContent] POST $url');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({}),
       ).timeout(const Duration(seconds: 15));
-      print('[getHomeContent] status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+      log('[getHomeContent] status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('[getHomeContent] error: $e');
+      log('[getHomeContent] error: $e');
     }
     return {};
   }
@@ -501,12 +502,12 @@ class NodeJSService {
     int page = 1,
   }) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
-      print('[ getCategoryContent] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      log('[ getCategoryContent] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
       return {};
     }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/category';
-      print('[ getCategoryContent] 📡 POST $url body={"id":"$categoryId","page":$page}');
+      log('[ getCategoryContent] 📡 POST $url body={"id":"$categoryId","page":$page}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -516,35 +517,35 @@ class NodeJSService {
           'filters': {},
         }),
       ).timeout(const Duration(seconds: 15));
-      print('[ getCategoryContent] 📡 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
+      log('[ getCategoryContent] 📡 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('[ getCategoryContent] ❌ 错误: $e');
+      log('[ getCategoryContent] ❌ 错误: $e');
     }
     return {};
   }
 
   Future<Map<String, dynamic>> getVideoDetail({required String videoId}) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
-      print('[ getVideoDetail] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      log('[ getVideoDetail] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
       return {};
     }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/detail';
-      print('[ getVideoDetail] 📡 POST $url body={"id":"$videoId"}');
+      log('[ getVideoDetail] 📡 POST $url body={"id":"$videoId"}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'id': videoId}),
       ).timeout(const Duration(seconds: 15));
-      print('[ getVideoDetail] 📡 响应: status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+      log('[ getVideoDetail] 📡 响应: status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('[ getVideoDetail] ❌ 错误: $e');
+      log('[ getVideoDetail] ❌ 错误: $e');
     }
     return {};
   }
@@ -555,12 +556,12 @@ class NodeJSService {
     required String playId,
   }) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
-      print('[ getPlayUrl] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      log('[ getPlayUrl] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
       return {};
     }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/play';
-      print('[ getPlayUrl] 🎬 POST $url body={"flag":"$flag","id":"$playId"}');
+      log('[ getPlayUrl] 🎬 POST $url body={"flag":"$flag","id":"$playId"}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -569,12 +570,12 @@ class NodeJSService {
           'id': playId,
         }),
       ).timeout(const Duration(seconds: 15));
-      print('[ getPlayUrl] 🎬 响应: status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+      log('[ getPlayUrl] 🎬 响应: status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('[ getPlayUrl] ❌ 错误: $e');
+      log('[ getPlayUrl] ❌ 错误: $e');
     }
     return {};
   }
@@ -590,12 +591,12 @@ class NodeJSService {
 
   Future<Map<String, dynamic>> search({required String keyword, int page = 1}) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
-      print('[ search] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      log('[ search] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
       return {};
     }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/search';
-      print('[ search] 🔍 POST $url body={"wd":"$keyword","page":$page}');
+      log('[ search] 🔍 POST $url body={"wd":"$keyword","page":$page}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -604,12 +605,12 @@ class NodeJSService {
           'page': page,
         }),
       ).timeout(const Duration(seconds: 15));
-      print('[ search] 🔍 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
+      log('[ search] 🔍 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('[ search] ❌ 错误: $e');
+      log('[ search] ❌ 错误: $e');
     }
     return {};
   }
@@ -630,7 +631,7 @@ class NodeJSService {
         }
       }
     } catch (e) {
-      print('getLiveChannels error: $e');
+      log('getLiveChannels error: $e');
     }
     return [];
   }
@@ -649,7 +650,7 @@ class NodeJSService {
         return data['url'] as String?;
       }
     } catch (e) {
-      print('getLivePlayUrl error: $e');
+      log('getLivePlayUrl error: $e');
     }
     return null;
   }
@@ -665,7 +666,7 @@ class NodeJSService {
       ).timeout(const Duration(seconds: 10));
       return response.statusCode == 200;
     } catch (e) {
-      print('addCloudDrive error: $e');
+      log('addCloudDrive error: $e');
     }
     return false;
   }
@@ -679,7 +680,7 @@ class NodeJSService {
         return response.body;
       }
     } catch (e) {
-      print('listCloudDriveFiles error: $e');
+      log('listCloudDriveFiles error: $e');
     }
     return '[]';
   }
@@ -694,7 +695,7 @@ class NodeJSService {
         return data['url'] as String?;
       }
     } catch (e) {
-      print('getCloudDrivePlayUrl error: $e');
+      log('getCloudDrivePlayUrl error: $e');
     }
     return null;
   }
@@ -730,7 +731,7 @@ class NodeJSService {
     try {
       await _channel.invokeMethod('stopNodeJS');
     } catch (e) {
-      print('stopNodeJS error: $e');
+      log('stopNodeJS error: $e');
     }
     _isInitialized = false;
     _isNodeReady = false;

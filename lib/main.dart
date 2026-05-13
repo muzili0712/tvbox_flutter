@@ -7,11 +7,16 @@ import 'package:tvbox_flutter/providers/cloud_drive_provider.dart';
 import 'package:tvbox_flutter/providers/history_provider.dart';
 import 'package:tvbox_flutter/providers/favorite_provider.dart';
 import 'package:tvbox_flutter/ui/home/home_page.dart';
+import 'package:tvbox_flutter/services/log_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  LogService.instance;
+  log('[main] 🚀 应用启动，LogService已初始化');
+
   await NodeJSService.instance.initialize();
+  log('[main] 🚀 NodeJS已初始化');
 
   runApp(
     MultiProvider(

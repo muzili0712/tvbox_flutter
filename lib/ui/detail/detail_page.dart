@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:tvbox_flutter/models/video_detail.dart';
 import 'package:tvbox_flutter/ui/player/video_player_page.dart';
 import 'package:tvbox_flutter/providers/history_provider.dart';
 import 'package:tvbox_flutter/providers/favorite_provider.dart';
+import 'package:tvbox_flutter/services/log_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:tvbox_flutter/models/video_item.dart';
 
@@ -30,25 +31,25 @@ class _DetailPageState extends State<DetailPage> {
   Future<void> _loadDetail() async {
     setState(() => _isLoading = true);
     try {
-      print('[详情页] 📖 加载视频详情: videoId=${widget.videoId}');
+      log('[详情页] 📖 加载视频详情: videoId=${widget.videoId}');
       await NodeJSService.instance.initSpider();
       final result =
           await NodeJSService.instance.getVideoDetail(videoId: widget.videoId);
       final list = result['list'] as List<dynamic>? ?? [];
-      print('[详情页] 📖 详情响应: list.length=${list.length}');
+      log('[详情页] 📖 详情响应: list.length=${list.length}');
       if (list.isNotEmpty) {
         final vod = list.first as Map<String, dynamic>;
-        print('[详情页] 📖 视频信息: name=${vod['vod_name']}, id=${vod['vod_id']}');
+        log('[详情页] 📖 视频信息: name=${vod['vod_name']}, id=${vod['vod_id']}');
 
         final playFrom =
             (vod['vod_play_from'] as String? ?? '').split('\$\$\$');
         final playUrl =
             (vod['vod_play_url'] as String? ?? '').split('\$\$\$');
 
-        print('[详情页] 📖 播放源: playFrom.length=${playFrom.length}, playUrl.length=${playUrl.length}');
+        log('[详情页] 📖 播放源: playFrom.length=${playFrom.length}, playUrl.length=${playUrl.length}');
         for (int i = 0; i < playFrom.length; i++) {
           final sourceEpisodes = playUrl.length > i ? playUrl[i].split('#').length : 0;
-          print('[详情页] 📖   源${i + 1}: name=${playFrom[i]}, 集数=$sourceEpisodes');
+          log('[详情页] 📖   源${i + 1}: name=${playFrom[i]}, 集数=$sourceEpisodes');
         }
 
         List<Episode> episodes = [];
@@ -67,9 +68,9 @@ class _DetailPageState extends State<DetailPage> {
           }
         }
 
-        print('[详情页] 📖 解析出${episodes.length}个剧集');
+        log('[详情页] 📖 解析出${episodes.length}个剧集');
         if (episodes.isNotEmpty) {
-          print('[详情页] 📖 第一集: name=${episodes.first.name}, sourceName=${episodes.first.sourceName}, url=${episodes.first.url.length > 80 ? '${episodes.first.url.substring(0, 80)}...' : episodes.first.url}');
+          log('[详情页] 📖 第一集: name=${episodes.first.name}, sourceName=${episodes.first.sourceName}, url=${episodes.first.url.length > 80 ? '${episodes.first.url.substring(0, 80)}...' : episodes.first.url}');
         }
 
         final detail = VideoDetail(
@@ -99,10 +100,10 @@ class _DetailPageState extends State<DetailPage> {
           _detail = detail;
         });
       } else {
-        print('[详情页] ⚠️ 详情返回空列表');
+        log('[详情页] ⚠️ 详情返回空列表');
       }
     } catch (e) {
-      print('[详情页] ❌ 加载详情失败: $e');
+      log('[详情页] ❌ 加载详情失败: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('加载失败: $e')),
       );
@@ -115,7 +116,7 @@ class _DetailPageState extends State<DetailPage> {
     if (_detail == null) return;
     final episode = _detail!.episodes[index];
 
-    print('[详情页] 🎬 点击播放: ${_detail!.name} - ${episode.name}, sourceName=${episode.sourceName}, url=${episode.url.length > 80 ? '${episode.url.substring(0, 80)}...' : episode.url}');
+    log('[详情页] 🎬 点击播放: ${_detail!.name} - ${episode.name}, sourceName=${episode.sourceName}, url=${episode.url.length > 80 ? '${episode.url.substring(0, 80)}...' : episode.url}');
 
     try {
       await NodeJSService.instance.initSpider();
@@ -127,10 +128,10 @@ class _DetailPageState extends State<DetailPage> {
       );
       final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
 
-      print('[详情页] 🎬 getPlayUrl结果: flag=${episode.sourceName}, id=${episode.url}, playUrl=$playUrl');
+      log('[详情页] 🎬 getPlayUrl结果: flag=${episode.sourceName}, id=${episode.url}, playUrl=$playUrl');
 
       if (playUrl.isEmpty) {
-        print('[详情页] ❌ 播放地址为空！');
+        log('[详情页] ❌ 播放地址为空！');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('获取播放地址失败')),
@@ -139,7 +140,7 @@ class _DetailPageState extends State<DetailPage> {
         return;
       }
 
-      print('[详情页] ✅ 跳转到播放页面: url=$playUrl');
+      log('[详情页] ✅ 跳转到播放页面: url=$playUrl');
       if (mounted) {
         Navigator.push(
           context,
@@ -155,7 +156,7 @@ class _DetailPageState extends State<DetailPage> {
         );
       }
     } catch (e) {
-      print('[详情页] ❌ 播放失败: $e');
+      log('[详情页] ❌ 播放失败: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('播放失败: $e')),
