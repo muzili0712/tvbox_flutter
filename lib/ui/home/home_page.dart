@@ -91,20 +91,23 @@ class _HomeContentState extends State<HomeContent>
     setState(() => _isLoading = true);
 
     final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+
+    await sourceProvider.ensureLoaded();
+
     final nodejs = NodeJSService.instance;
 
-    // 如果有当前源但 Spider 没有服务器，先加载源
     if (sourceProvider.currentSource != null &&
         sourceProvider.currentSource!.sourceType == 'remote' &&
         !nodejs.hasSpiderServer) {
+      print('[HomeContent] Loading source from URL: ${sourceProvider.currentSource!.url}');
       final success = await nodejs.loadSourceFromURL(sourceProvider.currentSource!.url);
+      print('[HomeContent] loadSourceFromURL result: $success, spiderPort: ${nodejs.spiderPort}');
       if (!success) {
         setState(() => _isLoading = false);
         return;
       }
     }
 
-    // 加载主页内容
     await sourceProvider.loadHomeContent();
 
     if (sourceProvider.categories.isNotEmpty && mounted) {
@@ -272,7 +275,7 @@ class _HomeContentState extends State<HomeContent>
             const Text('内容未加载', style: TextStyle(fontSize: 16, color: Colors.grey)),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => sourceProvider.activateCurrentSource(),
+              onPressed: () => _loadHomeData(),
               child: const Text('加载内容'),
             ),
           ],

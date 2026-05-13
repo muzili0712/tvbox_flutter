@@ -13,6 +13,7 @@ class SourceProvider extends ChangeNotifier {
   List<dynamic> _categories = [];
   bool _isLoading = false;
   String? _errorMessage;
+  Completer<void>? _loadCompleter;
 
   List<SourceConfig> get sources => _sources;
   SourceConfig? get currentSource => _currentSource;
@@ -26,7 +27,15 @@ class SourceProvider extends ChangeNotifier {
     _loadSources();
   }
 
+  Future<void> ensureLoaded() async {
+    if (_loadCompleter != null) {
+      await _loadCompleter!.future;
+    }
+  }
+
   Future<void> _loadSources() async {
+    _loadCompleter = Completer<void>();
+
     final prefs = await SharedPreferences.getInstance();
     final sourcesJson = prefs.getStringList(AppConstants.keySources) ?? [];
 
@@ -50,6 +59,7 @@ class SourceProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    _loadCompleter!.complete();
   }
 
   Future<bool> addSource(SourceConfig source) async {

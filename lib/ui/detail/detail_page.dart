@@ -94,6 +94,54 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
+  Future<void> _playEpisode(int index) async {
+    if (_detail == null) return;
+    final episode = _detail!.episodes[index];
+
+    try {
+      await NodeJSService.instance.initSpider();
+
+      final result = await NodeJSService.instance.getPlayUrl(
+        videoId: '',
+        flag: episode.sourceName ?? '',
+        playId: episode.url,
+      );
+      final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
+
+      print('[DetailPage] getPlayUrl result: flag=${episode.sourceName}, id=${episode.url}, url=$playUrl');
+
+      if (playUrl.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('获取播放地址失败')),
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => VideoPlayerPage(
+              playUrl: playUrl,
+              title: '${_detail!.name} - ${episode.name}',
+              videoDetail: _detail,
+              initialEpisodeIndex: index,
+              initialSourceIndex: 0,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('播放失败: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -170,35 +218,7 @@ class _DetailPageState extends State<DetailPage> {
               (context, index) {
                 final episode = detail.episodes[index];
                 return ElevatedButton(
-                  onPressed: () async {
-                    final result =
-                        await NodeJSService.instance.getPlayUrl(
-                      videoId: '',
-                      flag: episode.sourceName ?? '',
-                      playId: episode.url,
-                    );
-                    final playUrl = result['url']?.toString() ??
-                        result['parse']?.toString() ??
-                        '';
-                    if (playUrl.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('获取播放地址失败')),
-                      );
-                      return;
-                    }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => VideoPlayerPage(
-                          playUrl: playUrl,
-                          title: '${detail.name} - ${episode.name}',
-                          videoDetail: detail,
-                          initialEpisodeIndex: index,
-                          initialSourceIndex: 0,
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: () => _playEpisode(index),
                   child: Text(episode.name),
                 );
               },
