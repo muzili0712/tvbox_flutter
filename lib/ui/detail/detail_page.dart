@@ -127,7 +127,29 @@ class _DetailPageState extends State<DetailPage> {
         flag: episode.sourceName ?? '',
         playId: episode.url,
       );
-      final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
+      
+      // 解析 playUrl - 处理数组格式（wogg/网盘源返回的格式）
+      String playUrl = '';
+      final urlField = result['url'];
+      
+      if (urlField is List) {
+        log('[详情页] 🎬 检测到数组格式的playUrl: $urlField');
+        // 对于 wogg 源，格式是 [...names, ...urls]，取最后一个作为播放地址
+        // 或者取第一个非null的字符串
+        for (final item in urlField.reversed) {
+          if (item is String && item.isNotEmpty) {
+            playUrl = item;
+            break;
+          }
+        }
+        // 如果没找到，尝试用json编码
+        if (playUrl.isEmpty) {
+          playUrl = urlField.toString();
+        }
+      } else {
+        // 普通格式
+        playUrl = urlField?.toString() ?? result['parse']?.toString() ?? '';
+      }
 
       log('[详情页] 🎬 getPlayUrl结果: flag=${episode.sourceName}, id=${episode.url}, playUrl=$playUrl');
 
@@ -140,7 +162,10 @@ class _DetailPageState extends State<DetailPage> {
              episode.sourceName!.contains('百度') || 
              episode.sourceName!.contains('阿里') ||
              episode.sourceName!.contains('夸克') ||
-             episode.sourceName!.contains('迅雷'));
+             episode.sourceName!.contains('迅雷') ||
+             episode.sourceName!.contains('夸父') ||
+             episode.sourceName!.toLowerCase().contains('cloud') ||
+             episode.sourceName!.toLowerCase().contains('pan'));
           
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

@@ -37,6 +37,23 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
     String playUrl = widget.url;
     log('[VLC播放器] 🎬 开始解析: originalUrl=${widget.url}');
 
+    // 检查是否是数组格式（来自 wogg/网盘源）
+    if (widget.url.startsWith('[') && widget.url.endsWith(']')) {
+      log('[VLC播放器] 🔍 检测到数组格式，尝试解析...');
+      try {
+        // 尝试从数组中提取 URL
+        RegExp urlRegex = RegExp(r'(https?://[^\s,\'\"]+)');
+        Iterable<RegExpMatch> matches = urlRegex.allMatches(widget.url);
+        if (matches.isNotEmpty) {
+          // 取最后一个匹配的 URL，通常是真实播放地址
+          playUrl = matches.last.group(0)!;
+          log('[VLC播放器] ✅ 从数组中提取到URL: $playUrl');
+        }
+      } catch (e) {
+        log('[VLC播放器] ⚠️ 数组解析失败: $e');
+      }
+    }
+
     if (widget.url.contains('127.0.0.1') && widget.url.contains('proxy')) {
       log('[VLC播放器] 🔗 检测到代理URL，开始解析真实地址...');
       try {

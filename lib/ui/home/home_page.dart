@@ -477,26 +477,48 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
         // 检查是否有filters可用但未使用
         final availableFilters = sourceProvider.filters[widget.typeId];
         if (availableFilters != null && availableFilters is List && availableFilters.isNotEmpty) {
-          log('[分类内容] 💡 该分类有${availableFilters.length}个filter可用，尝试使用第一个filter值重新加载');
-          // 尝试使用第一个filter值重新加载
+          log('[分类内容] 💡 该分类有${availableFilters.length}个filter可用，尝试使用filter的init值重新加载');
+          // 尝试使用每个filter的init值重新加载
+          Map<String, dynamic> retryFilterParams = {};
           for (final filter in availableFilters) {
             if (filter is Map<String, dynamic>) {
               final key = filter['key'] as String?;
+              final init = filter['init'];
               final values = filter['value'] as List<dynamic>?;
-              if (key != null && values != null && values.isNotEmpty) {
-                final firstValue = values.first;
-                if (firstValue is Map && firstValue['v'] != null) {
-                  filterParams[key] = firstValue['v'];
-                  log('[分类内容] 💡 使用filter: $key=${firstValue['v']}');
+              
+              if (key != null) {
+                if (init != null && init.toString().isNotEmpty) {
+                  retryFilterParams[key] = init;
+                  log('[分类内容] 💡 使用filter init值: $key=$init');
+                } else if (values != null && values.isNotEmpty) {
+                  // 使用第一个非null值
+                  for (final v in values) {
+                    if (v != null) {
+                      if (v is Map && v['v'] != null) {
+                        retryFilterParams[key] = v['v'];
+                        log('[分类内容] 💡 使用filter值: $key=${v['v']}');
+                        break;
+                      } else if (v is Map && v['value'] != null) {
+                        retryFilterParams[key] = v['value'];
+                        log('[分类内容] 💡 使用filter值(value字段): $key=${v['value']}');
+                        break;
+                      } else {
+                        retryFilterParams[key] = v;
+                        log('[分类内容] 💡 使用filter原始值: $key=$v');
+                        break;
+                      }
+                    }
+                  }
                 }
               }
             }
           }
-          if (filterParams.isNotEmpty) {
+          if (retryFilterParams.isNotEmpty) {
+            log('[分类内容] 💡 使用重试filters: $retryFilterParams');
             final retryResult = await NodeJSService.instance.getCategoryContent(
               categoryId: widget.typeId,
               page: 1,
-              filters: filterParams,
+              filters: retryFilterParams,
             );
             final retryList = retryResult['list'] as List<dynamic>? ?? [];
             if (retryList.isNotEmpty) {
@@ -511,6 +533,8 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
                 _isLoading = false;
               });
               return;
+            } else {
+              log('[分类内容] ⚠️ 使用filter后仍然为空，pagecount=${retryResult['pagecount']}');
             }
           }
         }
