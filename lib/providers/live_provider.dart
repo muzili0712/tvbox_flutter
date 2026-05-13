@@ -27,7 +27,7 @@ class LiveProvider extends ChangeNotifier {
     }
   }
 
-  Future<String> getPlayUrl(String channelId) async {
+  Future<String?> getPlayUrl(String channelId) async {
     return await NodeJSService.instance.getLivePlayUrl(channelId);
   }
 }

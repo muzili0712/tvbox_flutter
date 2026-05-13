@@ -367,9 +367,28 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
     try {
       log('[分类内容] 📋 加载分类: typeId=${widget.typeId}, typeName=${widget.typeName}, siteKey=${widget.siteKey}, page=$_currentPage');
       await NodeJSService.instance.initSpider();
+      
+      final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+      final filters = sourceProvider.filters[widget.typeId] as List<dynamic>? ?? [];
+      
+      Map<String, dynamic> filterParams = {};
+      if (filters.isNotEmpty) {
+        for (final filter in filters) {
+          if (filter is Map<String, dynamic>) {
+            final key = filter['key'] as String?;
+            final init = filter['init'];
+            if (key != null && init != null && init.toString().isNotEmpty) {
+              filterParams[key] = init;
+            }
+          }
+        }
+      }
+      log('[分类内容] 📋 使用filters: $filterParams');
+      
       final result = await NodeJSService.instance.getCategoryContent(
         categoryId: widget.typeId,
         page: _currentPage,
+        filters: filterParams,
       );
 
       final list = result['list'] as List<dynamic>? ?? [];

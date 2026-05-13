@@ -500,6 +500,7 @@ class NodeJSService {
   Future<Map<String, dynamic>> getCategoryContent({
     required String categoryId,
     int page = 1,
+    Map<String, dynamic> filters = const {},
   }) async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
       log('[ getCategoryContent] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
@@ -507,14 +508,14 @@ class NodeJSService {
     }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/category';
-      log('[ getCategoryContent] 📡 POST $url body={"id":"$categoryId","page":$page}');
+      log('[ getCategoryContent] 📡 POST $url body={"id":"$categoryId","page":$page, "filters":$filters}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'id': categoryId,
           'page': page,
-          'filters': {},
+          'filters': filters,
         }),
       ).timeout(const Duration(seconds: 15));
       log('[ getCategoryContent] 📡 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');

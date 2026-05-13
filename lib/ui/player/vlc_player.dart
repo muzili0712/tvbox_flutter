@@ -80,21 +80,46 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
 
   void _initVlc(String url) {
     log('[VLC播放器] 🎬 初始化VLC控制器: url=$url');
+    
+    // 检查是否是M3U8格式
+    final isM3U8 = url.contains('.m3u8') || url.contains('m3u8');
+    log('[VLC播放器] 📋 URL类型: ${isM3U8 ? 'M3U8/HLS' : 'MP4/Direct'}');
+    
     _controller = VlcPlayerController.network(
       url,
       autoPlay: true,
       options: VlcPlayerOptions(
         video: VlcVideoOptions([
-          'network-caching=3000',
+          'network-caching=5000',
+          if (isM3U8) '--hls-live-edge=3',
+          if (isM3U8) '--hls-segment-threads=4',
         ]),
         audio: VlcAudioOptions([]),
         subtitle: VlcSubtitleOptions([]),
+        http: VlcHttpOptions([
+          '--http-user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
+        ]),
+        advanced: VlcAdvancedOptions([
+          '--ffmpeg-threads=4',
+          '--file-caching=5000',
+        ]),
       ),
     );
 
     _controller!.addListener(_onPlayerStateChanged);
 
     setState(() {});
+    
+    // 延迟检查播放状态
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _controller != null) {
+        log('[VLC播放器] 📊 播放状态检查: isPlaying=${_controller!.value.isPlaying}, isBuffering=${_controller!.value.isBuffering}, duration=${_controller!.value.duration}');
+        if (!_controller!.value.isPlaying && !_controller!.value.hasError) {
+          log('[VLC播放器] 🔄 尝试重新播放...');
+          _controller!.play();
+        }
+      }
+    });
   }
 
   void _onPlayerStateChanged() {

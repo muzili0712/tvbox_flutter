@@ -13,6 +13,7 @@ class SourceProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _sites = [];
   Map<String, dynamic>? _currentSite;
   List<dynamic> _categories = [];
+  Map<String, dynamic> _filters = {};
   bool _isLoading = false;
   String? _errorMessage;
   Completer<void>? _loadCompleter;
@@ -22,6 +23,7 @@ class SourceProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get sites => _sites;
   Map<String, dynamic>? get currentSite => _currentSite;
   List<dynamic> get categories => _categories;
+  Map<String, dynamic> get filters => _filters;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -251,14 +253,18 @@ class SourceProvider extends ChangeNotifier {
       log('[INFO] 📡 正在加载首页内容...');
       final homeResult = await nodejs.getHomeContent();
       final classData = homeResult['class'];
+      final filtersData = homeResult['filters'];
       if (classData is List) {
         _categories = classData;
+        _filters = filtersData is Map<String, dynamic> ? filtersData : {};
         log('[INFO] ✅ 首页加载成功: ${_categories.length}个分类');
+        log('[INFO] 📊 filters: ${_filters.keys.toList()}');
         for (final cat in _categories) {
           log('[INFO]   - ${cat['type_name']} (id=${cat['type_id']})');
         }
       } else {
         _categories = [];
+        _filters = {};
         log('[WARNING] ⚠️ 首页没有分类数据');
       }
     } catch (e) {

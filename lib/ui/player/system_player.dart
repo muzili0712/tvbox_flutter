@@ -31,15 +31,52 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
     _initPlayer();
   }
 
-  void _initPlayer() {
+  Future<void> _initPlayer() async {
     log('[系统播放器] 🎬 初始化: url=${widget.url}');
-    _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     
-    _videoController!.initialize().then((_) {
+    try {
+      _videoController = VideoPlayerController.networkUrl(
+        Uri.parse(widget.url),
+        httpHeaders: const {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
+        },
+      );
+      
+      await _videoController!.initialize();
+      
       if (!mounted) return;
-      log('[系统播放器] ✅ 初始化成功！开始播放');
+      
+      log('[系统播放器] ✅ 视频初始化成功，时长: ${_videoController!.value.duration}');
+      
+      _chewieController = ChewieController(
+        videoPlayerController: _videoController!,
+        autoPlay: true,
+        showControls: false,
+        errorBuilder: (context, errorMessage) {
+          log('[系统播放器] ❌ Chewie错误: $errorMessage');
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 8),
+                Text(
+                  '播放出错: ${errorMessage.length > 50 ? errorMessage.substring(0, 50) : errorMessage}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+      
+      _videoController!.addListener(_onPlayerStateChanged);
+      
+      await _videoController!.play();
+      log('[系统播放器] ✅ 开始播放');
+      
       setState(() {});
-    }).catchError((error) {
+    } catch (error) {
       log('[系统播放器] ❌ 初始化失败: $error');
       if (mounted) {
         setState(() {
@@ -47,31 +84,7 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
           _errorMessage = error.toString();
         });
       }
-    });
-
-    _chewieController = ChewieController(
-      videoPlayerController: _videoController!,
-      autoPlay: true,
-      showControls: false,
-      errorBuilder: (context, errorMessage) {
-        log('[系统播放器] ❌ Chewie错误: $errorMessage');
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 48),
-              const SizedBox(height: 8),
-              Text(
-                '播放出错: ${errorMessage.length > 50 ? errorMessage.substring(0, 50) : errorMessage}',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    _videoController!.addListener(_onPlayerStateChanged);
+    }
   }
 
   @override
