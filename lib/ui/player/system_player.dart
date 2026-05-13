@@ -31,13 +31,15 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
   }
 
   void _initPlayer() {
+    print('[系统播放器] 🎬 初始化: url=${widget.url}');
     _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     
     _videoController!.initialize().then((_) {
       if (!mounted) return;
+      print('[系统播放器] ✅ 初始化成功！开始播放');
       setState(() {});
     }).catchError((error) {
-      print('[SystemPlayer] Initialize error: $error');
+      print('[系统播放器] ❌ 初始化失败: $error');
       if (mounted) {
         setState(() {
           _hasError = true;
@@ -51,6 +53,7 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
       autoPlay: true,
       showControls: false,
       errorBuilder: (context, errorMessage) {
+        print('[系统播放器] ❌ Chewie错误: $errorMessage');
         return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -58,7 +61,7 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
               const Icon(Icons.error_outline, color: Colors.red, size: 48),
               const SizedBox(height: 8),
               Text(
-                '播放出错',
+                '播放出错: ${errorMessage.length > 50 ? errorMessage.substring(0, 50) : errorMessage}',
                 style: const TextStyle(color: Colors.white),
               ),
             ],
@@ -84,11 +87,12 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
     if (_videoController!.value.hasError && !_hasError) {
       _hasError = true;
       _errorMessage = _videoController!.value.errorDescription;
-      print('[SystemPlayer] Error: $_errorMessage');
+      print('[系统播放器] ❌ 播放错误: $_errorMessage');
     }
     
     if (_videoController!.value.isPlaying && _hasError) {
       _hasError = false;
+      print('[系统播放器] ✅ 恢复播放');
     }
     
     widget.onPlayerStateChanged(

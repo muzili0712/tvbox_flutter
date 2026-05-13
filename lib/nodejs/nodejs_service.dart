@@ -201,6 +201,7 @@ class NodeJSService {
     _currentSpiderKey = key;
     _currentSpiderType = type;
     _spiderApiBase = apiBase;
+    print('[ setCurrentSpider] 🔧 设置Spider: key=$key, type=$type, apiBase=$apiBase, spiderPath=${_spiderPath()}');
   }
 
   String get currentSpiderKey => _currentSpiderKey;
@@ -499,9 +500,13 @@ class NodeJSService {
     required String categoryId,
     int page = 1,
   }) async {
-    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
+      print('[ getCategoryContent] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      return {};
+    }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/category';
+      print('[ getCategoryContent] 📡 POST $url body={"id":"$categoryId","page":$page}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -511,29 +516,35 @@ class NodeJSService {
           'filters': {},
         }),
       ).timeout(const Duration(seconds: 15));
+      print('[ getCategoryContent] 📡 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('getCategoryContent error: $e');
+      print('[ getCategoryContent] ❌ 错误: $e');
     }
     return {};
   }
 
   Future<Map<String, dynamic>> getVideoDetail({required String videoId}) async {
-    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
+      print('[ getVideoDetail] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      return {};
+    }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/detail';
+      print('[ getVideoDetail] 📡 POST $url body={"id":"$videoId"}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'id': videoId}),
       ).timeout(const Duration(seconds: 15));
+      print('[ getVideoDetail] 📡 响应: status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('getVideoDetail error: $e');
+      print('[ getVideoDetail] ❌ 错误: $e');
     }
     return {};
   }
@@ -543,9 +554,13 @@ class NodeJSService {
     required String flag,
     required String playId,
   }) async {
-    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
+      print('[ getPlayUrl] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      return {};
+    }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/play';
+      print('[ getPlayUrl] 🎬 POST $url body={"flag":"$flag","id":"$playId"}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -554,11 +569,12 @@ class NodeJSService {
           'id': playId,
         }),
       ).timeout(const Duration(seconds: 15));
+      print('[ getPlayUrl] 🎬 响应: status=${response.statusCode} body=${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('getPlayUrl error: $e');
+      print('[ getPlayUrl] ❌ 错误: $e');
     }
     return {};
   }
@@ -573,9 +589,13 @@ class NodeJSService {
   }
 
   Future<Map<String, dynamic>> search({required String keyword, int page = 1}) async {
-    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return {};
+    if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) {
+      print('[ search] ❌ 前置条件不满足: spiderPort=$_spiderPort, apiBase=$_spiderApiBase, key=$_currentSpiderKey');
+      return {};
+    }
     try {
       final url = '${_spiderBaseUrl()}${_spiderPath()}/search';
+      print('[ search] 🔍 POST $url body={"wd":"$keyword","page":$page}');
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -584,11 +604,12 @@ class NodeJSService {
           'page': page,
         }),
       ).timeout(const Duration(seconds: 15));
+      print('[ search] 🔍 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('search error: $e');
+      print('[ search] ❌ 错误: $e');
     }
     return {};
   }
