@@ -90,18 +90,28 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
       autoPlay: true,
       options: VlcPlayerOptions(
         video: VlcVideoOptions([
-          'network-caching=5000',
-          if (isM3U8) '--hls-live-edge=3',
-          if (isM3U8) '--hls-segment-threads=4',
+          '--network-caching=10000',
+          '--file-caching=10000',
+          '--live-caching=10000',
+          if (isM3U8) '--hls-live-edge=4',
+          if (isM3U8) '--hls-segment-threads=2',
+          if (isM3U8) '--avformat-hls-init-windowsize=3',
         ]),
-        audio: VlcAudioOptions([]),
+        audio: VlcAudioOptions([
+          '--network-caching=10000',
+        ]),
         subtitle: VlcSubtitleOptions([]),
         http: VlcHttpOptions([
-          '--http-user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
+          '--http-user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+          '--http-referrer=https://51touxiang.com/',
+          '--http-continuous-flow',
         ]),
+        rtp: VlcRtpOptions([]),
         advanced: VlcAdvancedOptions([
-          '--ffmpeg-threads=4',
-          '--file-caching=5000',
+          '--avcodec-threads=2',
+          '--clock-jitter=0',
+          '--clock-synchro=0',
+          '--sout-mux-caching=10000',
         ]),
       ),
     );

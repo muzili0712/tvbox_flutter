@@ -369,6 +369,15 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
       await NodeJSService.instance.initSpider();
       
       final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+      
+      // 等待filters加载完成（切换线路时的时序问题）
+      int waitCount = 0;
+      while (sourceProvider.filters.isEmpty && waitCount < 10) {
+        log('[分类内容] ⏳ 等待filters加载...');
+        await Future.delayed(const Duration(milliseconds: 500));
+        waitCount++;
+      }
+      
       final filters = sourceProvider.filters[widget.typeId] as List<dynamic>? ?? [];
       
       Map<String, dynamic> filterParams = {};
