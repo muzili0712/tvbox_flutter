@@ -7,12 +7,14 @@ class VlcPlayerWidget extends StatefulWidget {
   final String url;
   final Function(bool isPlaying, double position, double duration) onPlayerStateChanged;
   final VoidCallback onTap;
+  final double playbackSpeed;
 
   const VlcPlayerWidget({
     super.key,
     required this.url,
     required this.onPlayerStateChanged,
     required this.onTap,
+    this.playbackSpeed = 1.0,
   });
 
   @override
@@ -42,7 +44,7 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
       log('[VLC播放器] 🔍 检测到数组格式，尝试解析...');
       try {
         // 尝试从数组中提取 URL
-        RegExp urlRegex = RegExp(r'(https?://[^\s,\'\"]+)');
+        RegExp urlRegex = RegExp(r'(https?://[^\s,\'"]+)');
         Iterable<RegExpMatch> matches = urlRegex.allMatches(widget.url);
         if (matches.isNotEmpty) {
           // 取最后一个匹配的 URL，通常是真实播放地址
@@ -147,6 +149,10 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
 
     setState(() {});
     
+    // 设置倍速
+    await _controller!.setPlaybackSpeed(widget.playbackSpeed);
+    log('[VLC播放器] ⚡ 设置倍速: ${widget.playbackSpeed}x');
+    
     await Future.delayed(const Duration(seconds: 2));
     
     if (mounted && _controller != null) {
@@ -165,6 +171,15 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
           log('[VLC播放器] 📊 重试后状态: isPlaying=$retryIsPlaying');
         }
       }
+    }
+  }
+
+  @override
+  void didUpdateWidget(VlcPlayerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.playbackSpeed != widget.playbackSpeed && _controller != null) {
+      _controller!.setPlaybackSpeed(widget.playbackSpeed);
+      log('[VLC播放器] ⚡ 更新倍速: ${widget.playbackSpeed}x');
     }
   }
 

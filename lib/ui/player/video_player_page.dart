@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tvbox_flutter/services/log_service.dart';
@@ -7,6 +8,7 @@ import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:tvbox_flutter/ui/player/vlc_player.dart';
 import 'package:tvbox_flutter/ui/player/system_player.dart';
 import 'package:tvbox_flutter/utils/player_util.dart';
+import 'package:tvbox_flutter/services/hls_parser.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 class VideoPlayerPage extends StatefulWidget {
@@ -40,6 +42,17 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   late int _currentSourceIndex;
   String _parsedUrl = '';
   List<String> _urlSegments = [];
+  
+  // HLS 清晰度相关
+  List<HLSQualityOption> _qualityOptions = [];
+  HLSQualityOption? _currentQuality;
+  bool _isResolvingQuality = false;
+  String? _qualityResolveToken;
+  CancelableOperation? _qualityResolveOperation;
+  
+  // 倍速控制
+  double _playbackSpeed = 1.0;
+  static const List<double> _availableSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
   @override
   void initState() {
@@ -54,6 +67,64 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     
     log('[播放页] 🎬 初始化: player=$_currentPlayer, originalUrl=${widget.playUrl}, title=${widget.title}');
     log('[播放页] 📝 URL解析结果: url=$_parsedUrl, segmentsCount=${_urlSegments.length}, quality=${parsedResult.quality}');
+    
+    // 异步解析 HLS 清晰度
+    _resolveQualityOptions();
+  }
+
+  @override
+  void dispose() {
+    _qualityResolveOperation?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _resolveQualityOptions() async {
+    if (!HLSParser.looksLikeHLSURL(_parsedUrl)) {
+      log('[播放页] ⚠️ 不是HLS URL，跳过清晰度解析');
+      return;
+    }
+
+    setState(() {
+      _isResolvingQuality = true;
+    });
+
+    final token = UniqueKey().toString();
+    _qualityResolveToken = token;
+
+    _qualityResolveOperation = CancelableOperation.fromFuture(
+      HLSParser.resolveQualityOptions(_parsedUrl),
+      onCancel: () => log('[播放页] 🔄 清晰度解析任务已取消'),
+    );
+
+    try {
+      final options = await _qualityResolveOperation?.value;
+      
+      if (!mounted || _qualityResolveToken != token) return;
+      
+      setState(() {
+        _qualityOptions = options ?? [];
+        _isResolvingQuality = false;
+        if (_qualityOptions.isNotEmpty) {
+          _currentQuality = _qualityOptions.first;
+          log('[播放页] ✅ HLS清晰度解析完成: ${_qualityOptions.length}个选项');
+        }
+      });
+    } catch (e) {
+      log('[播放页] ❌ 清晰度解析失败: $e');
+      if (mounted) {
+        setState(() {
+          _isResolvingQuality = false;
+        });
+      }
+    }
+  }
+
+  void _changeQuality(HLSQualityOption quality) {
+    log('[播放页] 🔄 切换清晰度: ${_currentQuality?.name ?? '未知'} -> ${quality.name}');
+    setState(() {
+      _currentQuality = quality;
+      _parsedUrl = quality.url;
+    });
   }
 
   void _changePlayer(PlayerType player) {
@@ -67,10 +138,16 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   Future<void> _changeEpisode(int index) async {
     if (widget.videoDetail == null) return;
     log('[播放页] 🔄 切换集数: $_currentEpisodeIndex -> $index');
+    
+    _qualityResolveOperation?.cancel();
+    
     setState(() {
       _currentEpisodeIndex = index;
       _isLoading = true;
+      _qualityOptions = [];
+      _currentQuality = null;
     });
+    
     final episode = widget.videoDetail!.episodes[index];
     try {
       await NodeJSService.instance.initSpider();
@@ -79,9 +156,24 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         flag: episode.sourceName ?? '',
         playId: episode.url,
       );
-      final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
+      
+      // 处理数组格式的响应
+      String playUrl = '';
+      final urlField = result['url'];
+      if (urlField is List) {
+        for (final item in urlField.reversed) {
+          if (item is String && item.isNotEmpty) {
+            playUrl = item;
+            break;
+          }
+        }
+      } else {
+        playUrl = urlField?.toString() ?? result['parse']?.toString() ?? '';
+      }
+      
       log('[播放页] 🔄 切换集数结果: playUrl=$playUrl');
       if (playUrl.isEmpty || !mounted) return;
+      
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -97,6 +189,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     } catch (e) {
       log('[播放页] ❌ 切换集数失败: $e');
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('切换集数失败: $e')),
         );
@@ -106,10 +199,15 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
 
   Future<void> _changeSource(int index) async {
     if (widget.videoDetail == null) return;
+    _qualityResolveOperation?.cancel();
+    
     setState(() {
       _currentSourceIndex = index;
       _isLoading = true;
+      _qualityOptions = [];
+      _currentQuality = null;
     });
+    
     final episode = widget.videoDetail!.episodes[_currentEpisodeIndex];
     try {
       await NodeJSService.instance.initSpider();
@@ -118,8 +216,22 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         flag: episode.sourceName ?? '',
         playId: episode.url,
       );
-      final playUrl = result['url']?.toString() ?? result['parse']?.toString() ?? '';
+      
+      String playUrl = '';
+      final urlField = result['url'];
+      if (urlField is List) {
+        for (final item in urlField.reversed) {
+          if (item is String && item.isNotEmpty) {
+            playUrl = item;
+            break;
+          }
+        }
+      } else {
+        playUrl = urlField?.toString() ?? result['parse']?.toString() ?? '';
+      }
+      
       if (playUrl.isEmpty || !mounted) return;
+      
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -134,6 +246,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       );
     } catch (e) {
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('切换源失败: $e')),
         );
@@ -166,6 +279,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       case PlayerType.vlc:
         return VlcPlayerWidget(
           url: _parsedUrl,
+          playbackSpeed: _playbackSpeed,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
               _isPlaying = isPlaying;
@@ -206,6 +320,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                 onPressed: () => Navigator.pop(context),
               ),
               actions: [
+                _buildQualityButton(),
+                _buildSpeedButton(),
                 PopupMenuButton<PlayerType>(
                   icon: const Icon(Icons.settings),
                   onSelected: _changePlayer,
@@ -224,6 +340,94 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
             ),
             const Spacer(),
             _buildPlayerControls(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpeedButton() {
+    return PopupMenuButton<double>(
+      tooltip: '倍速',
+      onSelected: (speed) {
+        setState(() {
+          _playbackSpeed = speed;
+          log('[播放页] 🔄 切换倍速: ${speed}x');
+        });
+      },
+      itemBuilder: (context) {
+        return _availableSpeeds.map((speed) {
+          return PopupMenuItem(
+            value: speed,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('${speed}x'),
+                if (_playbackSpeed == speed)
+                  const Icon(Icons.check, color: Colors.blue),
+              ],
+            ),
+          );
+        }).toList();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.speed, size: 16),
+            const SizedBox(width: 4),
+            Text(
+              '${_playbackSpeed}x',
+              style: const TextStyle(fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQualityButton() {
+    if (_qualityOptions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return PopupMenuButton<HLSQualityOption>(
+      icon: const Icon(Icons.high_quality),
+      tooltip: '清晰度',
+      onSelected: _changeQuality,
+      itemBuilder: (context) {
+        return _qualityOptions.map((option) {
+          return PopupMenuItem(
+            value: option,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(option.name),
+                if (_currentQuality?.url == option.url)
+                  const Icon(Icons.check, color: Colors.blue),
+              ],
+            ),
+          );
+        }).toList();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.high_quality, size: 16),
+            const SizedBox(width: 4),
+            Text(
+              _currentQuality?.name ?? '高清',
+              style: const TextStyle(fontSize: 14),
+            ),
           ],
         ),
       ),
