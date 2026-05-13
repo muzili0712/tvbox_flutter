@@ -37,8 +37,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   bool _isPlaying = false;
   late int _currentEpisodeIndex;
   late int _currentSourceIndex;
-  String _resolvedPlayUrl = '';
-  bool _urlResolved = false;
 
   @override
   void initState() {
@@ -46,47 +44,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     _currentPlayer = Provider.of<PlayerProvider>(context, listen: false).defaultPlayer;
     _currentEpisodeIndex = widget.initialEpisodeIndex;
     _currentSourceIndex = widget.initialSourceIndex;
-    _resolvedPlayUrl = widget.playUrl;
-    _resolveAndLoadVideo();
-  }
-
-  Future<void> _resolveAndLoadVideo() async {
-    setState(() => _isLoading = true);
-    
-    String finalUrl = widget.playUrl;
-    
-    if (widget.playUrl.contains('127.0.0.1') && widget.playUrl.contains('proxy')) {
-      try {
-        final uri = Uri.parse(widget.playUrl);
-        final actualUrl = uri.queryParameters['url'];
-        if (actualUrl != null && actualUrl.isNotEmpty) {
-          finalUrl = actualUrl;
-          print('[VideoPlayer] Extracted direct URL from proxy: ${finalUrl.substring(0, finalUrl.length > 100 ? 100 : finalUrl.length)}...');
-        } else {
-          print('[VideoPlayer] No url param in proxy, trying HTTP fetch...');
-          final response = await http.get(uri).timeout(const Duration(seconds: 10));
-          if (response.statusCode == 200) {
-            final body = response.body.trim();
-            if (body.startsWith('http') && (body.contains('.m3u8') || body.contains('.mp4'))) {
-              finalUrl = body;
-              print('[VideoPlayer] Got actual stream URL: ${finalUrl.substring(0, 100)}...');
-            }
-          }
-        }
-      } catch (e) {
-        print('[VideoPlayer] Proxy resolve error: $e');
-      }
-    }
-    
-    setState(() {
-      _resolvedPlayUrl = finalUrl;
-      _urlResolved = true;
-      _isLoading = false;
-    });
-  }
-
-  void _loadVideo() {
-    // 空实现，避免老函数调用
+    setState(() => _isLoading = false);
   }
 
   void _changePlayer(PlayerType player) {
@@ -186,17 +144,22 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   Widget _buildPlayer() {
-    if (!_urlResolved) {
-      return const SizedBox.shrink();
+    String playUrl = widget.playUrl;
+    if (_currentPlayer == PlayerType.vlc && widget.playUrl.contains('127.0.0.1') && widget.playUrl.contains('proxy')) {
+      try {
+        final uri = Uri.parse(widget.playUrl);
+        final actualUrl = uri.queryParameters['url'];
+        if (actualUrl != null && actualUrl.isNotEmpty) {
+          playUrl = actualUrl;
+        }
+      } catch (e) {
+        // 使用原 URL
+      }
     }
-    
-    final playUrl = _resolvedPlayUrl.isNotEmpty ? _resolvedPlayUrl : widget.playUrl;
-    final playerKey = ValueKey<String>(playUrl);
     
     switch (_currentPlayer) {
       case PlayerType.vlc:
         return VlcPlayerWidget(
-          key: playerKey,
           url: playUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
@@ -209,8 +172,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         );
       case PlayerType.system:
         return SystemPlayerWidget(
-          key: playerKey,
-          url: playUrl,
+          url: widget.playUrl,
           onPlayerStateChanged: (isPlaying, position, duration) {
             setState(() {
               _isPlaying = isPlaying;

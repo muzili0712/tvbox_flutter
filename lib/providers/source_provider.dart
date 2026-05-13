@@ -50,18 +50,6 @@ class SourceProvider extends ChangeNotifier {
     }
 
     notifyListeners();
-
-    if (_currentSource != null && _currentSource!.sourceType == 'remote') {
-      final nodejs = NodeJSService.instance;
-      if (!nodejs.hasSpiderServer) {
-        final success = await nodejs.loadSourceFromURL(_currentSource!.url);
-        if (success) {
-          await loadHomeContent();
-        }
-      } else {
-        await loadHomeContent();
-      }
-    }
   }
 
   Future<bool> addSource(SourceConfig source) async {
