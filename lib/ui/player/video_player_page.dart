@@ -8,6 +8,7 @@ import 'package:tvbox_flutter/models/video_detail.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 import 'package:tvbox_flutter/ui/player/vlc_player.dart';
 import 'package:tvbox_flutter/ui/player/system_player.dart';
+import 'package:tvbox_flutter/ui/player/danmaku_overlay.dart';
 import 'package:tvbox_flutter/utils/player_util.dart';
 import 'package:tvbox_flutter/services/hls_parser.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -54,6 +55,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   // 倍速控制
   double _playbackSpeed = 1.0;
   static const List<double> _availableSpeeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+  
+  // 弹幕控制
+  bool _danmakuEnabled = false;
+  final StreamController<String> _danmakuController = StreamController<String>.broadcast();
 
   @override
   void initState() {
@@ -76,6 +81,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   @override
   void dispose() {
     _qualityResolveOperation?.cancel();
+    _danmakuController.close();
     super.dispose();
   }
 
@@ -262,6 +268,10 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       body: Stack(
         children: [
           _buildPlayer(),
+          DanmakuOverlay(
+            danmakuStream: _danmakuController.stream,
+            enabled: _danmakuEnabled,
+          ),
           if (_showControls) _buildControls(),
           if (_isLoading) _buildLoading(),
         ],
@@ -323,6 +333,21 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
               actions: [
                 _buildQualityButton(),
                 _buildSpeedButton(),
+                IconButton(
+                  icon: Icon(_danmakuEnabled ? Icons.chat : Icons.chat_bubble_outline),
+                  tooltip: '弹幕',
+                  onPressed: () {
+                    setState(() {
+                      _danmakuEnabled = !_danmakuEnabled;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(_danmakuEnabled ? '弹幕已开启' : '弹幕已关闭'),
+                        duration: const Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
                 PopupMenuButton<PlayerType>(
                   icon: const Icon(Icons.settings),
                   onSelected: _changePlayer,
@@ -492,6 +517,52 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
             ],
           ),
           if (widget.videoDetail != null) _buildEpisodeSelector(),
+          if (_danmakuEnabled) _buildDanmakuInput(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDanmakuInput() {
+    final controller = TextEditingController();
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: const InputDecoration(
+                hintText: '发送弹幕...',
+                hintStyle: TextStyle(color: Colors.white54, fontSize: 14),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                isDense: true,
+              ),
+              onSubmitted: (text) {
+                if (text.isNotEmpty) {
+                  _danmakuController.add(text);
+                  controller.clear();
+                }
+              },
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.send, color: Colors.white54, size: 18),
+            onPressed: () {
+              final text = controller.text;
+              if (text.isNotEmpty) {
+                _danmakuController.add(text);
+                controller.clear();
+              }
+            },
+          ),
         ],
       ),
     );

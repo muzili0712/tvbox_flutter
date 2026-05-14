@@ -642,6 +642,65 @@ class NodeJSService {
     return {};
   }
 
+  Future<Map<String, dynamic>> searchWithSpider({
+    required String keyword,
+    required String spiderKey,
+    required int spiderType,
+    String apiBase = '',
+    int page = 1,
+  }) async {
+    if (_spiderPort <= 0) return {};
+
+    String spiderPath;
+    if (apiBase.isNotEmpty) {
+      spiderPath = apiBase;
+    } else {
+      spiderPath = '/$spiderKey/$spiderType';
+    }
+
+    try {
+      final initUrl = '${_spiderBaseUrl()}$spiderPath/init';
+      log('[searchWithSpider] init POST $initUrl');
+      await http.post(
+        Uri.parse(initUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({}),
+      ).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      log('[searchWithSpider] init error: $e');
+    }
+
+    for (int retry = 0; retry < 3; retry++) {
+      try {
+        final url = '${_spiderBaseUrl()}$spiderPath/search';
+        log('[searchWithSpider] POST $url body={"wd":"$keyword","page":$page}${retry > 0 ? ' (重试 $retry)' : ''}');
+        final response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'wd': keyword,
+            'page': page,
+          }),
+        ).timeout(const Duration(seconds: 15));
+        log('[searchWithSpider] 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
+        if (response.statusCode == 200) {
+          return jsonDecode(response.body) as Map<String, dynamic>;
+        }
+        break;
+      } on TimeoutException {
+        log('[searchWithSpider] ⏱️ 超时 (尝试 ${retry + 1}/3)');
+        if (retry < 2) {
+          await Future.delayed(Duration(seconds: 1 + retry));
+          continue;
+        }
+      } catch (e) {
+        log('[searchWithSpider] ❌ 错误: $e');
+        break;
+      }
+    }
+    return {};
+  }
+
   Future<List<Map<String, dynamic>>> getLiveChannels() async {
     if (_spiderPort <= 0 || (_spiderApiBase.isEmpty && _currentSpiderKey.isEmpty)) return [];
     try {

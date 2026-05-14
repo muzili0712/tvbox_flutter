@@ -141,13 +141,17 @@ class _VlcPlayerWidgetState extends State<VlcPlayerWidget> {
 
     setState(() {});
     
-    // 设置倍速
-    try {
-      await _controller!.setPlaybackSpeed(widget.playbackSpeed);
-      log('[VLC播放器] ⚡ 设置倍速: ${widget.playbackSpeed}x');
-    } catch (e) {
-      log('[VLC播放器] ⚠️ 设置倍速失败: $e');
-    }
+    _controller!.initialize().then((_) {
+      if (!mounted) return;
+      try {
+        _controller!.setPlaybackSpeed(widget.playbackSpeed);
+        log('[VLC播放器] ⚡ 设置倍速: ${widget.playbackSpeed}x');
+      } catch (e) {
+        log('[VLC播放器] ⚠️ 设置倍速失败: $e');
+      }
+    }).catchError((e) {
+      log('[VLC播放器] ⚠️ 初始化失败: $e');
+    });
   }
 
   @override

@@ -115,14 +115,17 @@ class _SearchPageState extends State<SearchPage> {
     try {
       final nodejsService = NodeJSService.instance;
       
-      // 临时切换到该站点进行搜索
       final shortKey = siteKey.replaceFirst('nodejs_', '');
       final type = site['type'] as int? ?? 3;
       final api = site['api'] as String? ?? '';
-      nodejsService.setCurrentSpider(shortKey, type, apiBase: api);
-      await nodejsService.initSpider();
       
-      final result = await nodejsService.search(keyword: keyword, page: 1);
+      final result = await nodejsService.searchWithSpider(
+        keyword: keyword,
+        spiderKey: shortKey,
+        spiderType: type,
+        apiBase: api,
+        page: 1,
+      );
       
       if (!mounted) return;
       
@@ -135,7 +138,6 @@ class _SearchPageState extends State<SearchPage> {
       
       log('[搜索] 🔍 ${site['name']} 返回 ${items.length} 条结果');
       
-      // 过滤和排序
       items = _filterSearchResults(items, keyword);
       items = _sortByRelevance(items, keyword);
       

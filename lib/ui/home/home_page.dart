@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:tvbox_flutter/services/log_service.dart';
@@ -866,37 +867,36 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
                 ),
               );
             } else if (currentSiteKey == 'nodejs_baseset') {
-              // 配置中心线路，根据内容判断行为
               log('[分类内容] ⚙️ 配置中心线路，检查内容: ${video.name}, cover=${video.cover}');
               
-              // 如果有cover字段且包含URL，检查是图片还是网页
               if (video.cover.isNotEmpty && video.cover.startsWith('http')) {
                 log('[分类内容] 🎨 配置中心检测到链接: ${video.cover}');
                 
-                // 判断是否是图片
-                final isImage = video.cover.toLowerCase().contains(RegExp(r'\.(png|jpg|jpeg|gif|webp|bmp)(\?|$)')) || 
-                               video.name.contains('扫码') || 
-                               video.name.contains('二维码');
+                String openUrl = video.cover;
                 
-                if (isImage) {
-                  // 显示图片
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => _ImageViewerPage(url: video.cover, title: video.name),
-                    ),
-                  );
-                } else {
-                  // 打开网页
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => _WebViewPage(url: video.cover, title: video.name),
-                    ),
-                  );
+                // 尝试解码 proxy URL 中的 base64 部分
+                final proxyMatch = RegExp(r'/proxy/([A-Za-z0-9+/=]+)').firstMatch(video.cover);
+                if (proxyMatch != null) {
+                  try {
+                    final encoded = proxyMatch.group(1)!;
+                    final decoded = utf8.decode(base64Decode(encoded));
+                    log('[分类内容] 🔓 proxy解码: $decoded');
+                    if (decoded.startsWith('http')) {
+                      openUrl = decoded;
+                    }
+                  } catch (e) {
+                    log('[分类内容] ⚠️ proxy解码失败: $e');
+                  }
                 }
+                
+                // 配置中心链接始终用WebView打开
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => _WebViewPage(url: openUrl, title: video.name),
+                  ),
+                );
               } else {
-                // 默认打开配置页面
                 log('[分类内容] ⚙️ 配置中心线路，打开Web配置页面');
                 Navigator.push(
                   context,

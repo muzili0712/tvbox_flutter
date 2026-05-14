@@ -2,12 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:tvbox_flutter/nodejs/nodejs_service.dart';
 
 enum PlayerType {
-  vlc,
   system,
+  vlc,
 }
 
 class PlayerProvider extends ChangeNotifier {
-  PlayerType _defaultPlayer = PlayerType.vlc;
+  PlayerType _defaultPlayer = PlayerType.system;
   PlayerType get defaultPlayer => _defaultPlayer;
   
   bool _hardwareAcceleration = true;
