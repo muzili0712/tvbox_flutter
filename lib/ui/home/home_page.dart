@@ -622,6 +622,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
       waitCount++;
     }
     if (mounted) {
+      _initFilters();
       _loadContent();
     }
   }
@@ -634,6 +635,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
         _lastFiltersKey != Provider.of<SourceProvider>(context, listen: false).filters.keys.toString()) {
       _lastSiteKey = widget.siteKey;
       _lastFiltersKey = Provider.of<SourceProvider>(context, listen: false).filters.keys.toString();
+      _initFilters();
       _currentPage = 1;
       _hasMore = true;
       _videos = [];
