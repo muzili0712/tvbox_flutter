@@ -573,6 +573,8 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
   bool _hasMore = true;
   String _lastSiteKey = '';
   String _lastFiltersKey = '';
+  Map<String, String> _selectedFilters = {};
+  List<Map<String, dynamic>> _filterDefs = [];
 
   @override
   bool get wantKeepAlive => true;
@@ -582,8 +584,29 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
     super.initState();
     _lastSiteKey = widget.siteKey;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initFilters();
       _waitForFiltersAndLoad();
     });
+  }
+
+  void _initFilters() {
+    final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+    final filters = sourceProvider.filters[widget.typeId];
+    if (filters is List && filters.isNotEmpty) {
+      _filterDefs = filters.cast<Map<String, dynamic>>();
+      _selectedFilters = {};
+      for (final filter in _filterDefs) {
+        final key = filter['key'] as String?;
+        if (key == null) continue;
+        final init = filter['init'];
+        if (init != null && init.toString().isNotEmpty) {
+          _selectedFilters[key] = init.toString();
+        }
+      }
+    } else {
+      _filterDefs = [];
+      _selectedFilters = {};
+    }
   }
 
   Future<void> _waitForFiltersAndLoad() async {
@@ -626,65 +649,11 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
     try {
       log('[分类内容] 📋 加载分类: typeId=${widget.typeId}, typeName=${widget.typeName}, siteKey=${widget.siteKey}, page=$_currentPage');
       await NodeJSService.instance.initSpider();
-      
-      final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
-      
-      log('[分类内容] 🔍 调试 - filters.keys=${sourceProvider.filters.keys.toList()}, typeId=${widget.typeId}, typeIdType=${widget.typeId.runtimeType}');
-      
-      List<dynamic>? filters = sourceProvider.filters[widget.typeId] as List<dynamic>?;
-      Map<String, dynamic> filterParams = {};
-      bool shouldTryEmptyFilters = false;
-      
-      if (filters != null && filters.isNotEmpty) {
-        log('[分类内容] 🔍 当前分类(${widget.typeId})有${filters.length}个filters, 完整filters: $filters');
-        for (final filter in filters) {
-          if (filter is Map<String, dynamic>) {
-            final key = filter['key'] as String?;
-            final init = filter['init'];
-            final values = filter['value'] as List<dynamic>?;
-            
-            if (key != null) {
-              String? filterValue;
-              
-              // 优先使用 init 值
-              if (init != null && init.toString().isNotEmpty) {
-                filterValue = init.toString();
-                log('[分类内容] ✅ 使用init值: $key=$filterValue');
-              } else if (values != null && values.isNotEmpty) {
-                // 从 values 中获取第一个有效值
-                for (final v in values) {
-                  if (v is Map) {
-                    final vv = v['v']?.toString() ?? v['value']?.toString();
-                    if (vv != null && vv.isNotEmpty) {
-                      filterValue = vv;
-                      break;
-                    }
-                  } else if (v != null && v.toString().isNotEmpty) {
-                    filterValue = v.toString();
-                    break;
-                  }
-                }
-                if (filterValue != null) {
-                  log('[分类内容] ✅ 使用第一个可选值: $key=$filterValue');
-                }
-              }
-              
-              // 只有当值不为空时才添加到 filterParams
-              if (filterValue != null && filterValue.isNotEmpty) {
-                filterParams[key] = filterValue;
-              } else {
-                log('[分类内容] ⚠️ filter $key 没有有效值，跳过');
-              }
-            }
-          }
-        }
-        shouldTryEmptyFilters = true;
-      } else {
-        log('[分类内容] ⚠️ 当前分类(${widget.typeId})没有filters');
-      }
-      
+
+      Map<String, dynamic> filterParams = Map<String, dynamic>.from(_selectedFilters);
+
       log('[分类内容] 📋 使用filters: $filterParams');
-      
+
       final result = await NodeJSService.instance.getCategoryContent(
         categoryId: widget.typeId,
         page: _currentPage,
@@ -696,8 +665,7 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
 
       log('[分类内容] 📋 获取到${list.length}个视频, pagecount=$pagecount, currentPage=$_currentPage');
 
-      // 如果第一次返回空，尝试不传 filters
-      if (list.isEmpty && _currentPage == 1 && shouldTryEmptyFilters && filterParams.isNotEmpty) {
+      if (list.isEmpty && _currentPage == 1 && filterParams.isNotEmpty) {
         log('[分类内容] 🔄 第一次返回空，尝试不传任何 filters 重新加载');
         final retryResult = await NodeJSService.instance.getCategoryContent(
           categoryId: widget.typeId,
@@ -715,72 +683,6 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
 
       if (newVideos.isNotEmpty) {
         log('[分类内容] 📋 第一个视频: name=${newVideos.first.name}, id=${newVideos.first.id}');
-      } else if (_currentPage == 1) {
-        log('[分类内容] ⚠️ 分类内容为空，可能该分类需要子分类或filters参数');
-        // 检查是否有filters可用但未使用
-        final availableFilters = sourceProvider.filters[widget.typeId];
-        if (availableFilters != null && availableFilters is List && availableFilters.isNotEmpty) {
-          log('[分类内容] 💡 该分类有${availableFilters.length}个filter可用，尝试使用filter的init值重新加载');
-          // 尝试使用每个filter的init值重新加载
-          Map<String, dynamic> retryFilterParams = {};
-          for (final filter in availableFilters) {
-            if (filter is Map<String, dynamic>) {
-              final key = filter['key'] as String?;
-              final init = filter['init'];
-              final values = filter['value'] as List<dynamic>?;
-              
-              if (key != null) {
-                if (init != null && init.toString().isNotEmpty) {
-                  retryFilterParams[key] = init;
-                  log('[分类内容] 💡 使用filter init值: $key=$init');
-                } else if (values != null && values.isNotEmpty) {
-                  // 使用第一个非null值
-                  for (final v in values) {
-                    if (v != null) {
-                      if (v is Map && v['v'] != null) {
-                        retryFilterParams[key] = v['v'];
-                        log('[分类内容] 💡 使用filter值: $key=${v['v']}');
-                        break;
-                      } else if (v is Map && v['value'] != null) {
-                        retryFilterParams[key] = v['value'];
-                        log('[分类内容] 💡 使用filter值(value字段): $key=${v['value']}');
-                        break;
-                      } else {
-                        retryFilterParams[key] = v;
-                        log('[分类内容] 💡 使用filter原始值: $key=$v');
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-          if (retryFilterParams.isNotEmpty) {
-            log('[分类内容] 💡 使用重试filters: $retryFilterParams');
-            final retryResult = await NodeJSService.instance.getCategoryContent(
-              categoryId: widget.typeId,
-              page: 1,
-              filters: retryFilterParams,
-            );
-            final retryList = retryResult['list'] as List<dynamic>? ?? [];
-            if (retryList.isNotEmpty) {
-              log('[分类内容] ✅ 使用filter后获取到${retryList.length}个视频');
-              final retryVideos = retryList
-                  .map((json) => VideoItem.fromJson(json as Map<String, dynamic>))
-                  .toList();
-              setState(() {
-                _videos = retryVideos;
-                _hasMore = 1 < (retryResult['pagecount'] as int? ?? 1);
-                _currentPage = 2;
-                _isLoading = false;
-              });
-              return;
-            } else {
-              log('[分类内容] ⚠️ 使用filter后仍然为空，pagecount=${retryResult['pagecount']}');
-            }
-          }
-        }
       }
 
       setState(() {
@@ -803,14 +705,27 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
   Widget build(BuildContext context) {
     super.build(context);
 
+    final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+    final hasFilters = _filterDefs.isNotEmpty;
+
     if (_isLoading && _videos.isEmpty) {
-      return const Center(
-        child: SpinKitFadingCircle(color: Colors.blue, size: 50.0),
-      );
+      return hasFilters
+          ? Column(
+              children: [
+                _buildFilterChips(),
+                const Expanded(
+                  child: Center(
+                    child: SpinKitFadingCircle(color: Colors.blue, size: 50.0),
+                  ),
+                ),
+              ],
+            )
+          : const Center(
+              child: SpinKitFadingCircle(color: Colors.blue, size: 50.0),
+            );
     }
 
-    if (_videos.isEmpty) {
-      final sourceProvider = Provider.of<SourceProvider>(context, listen: false);
+    if (_videos.isEmpty && !hasFilters) {
       final isIndexSite = sourceProvider.isCurrentSiteIndex;
       return Center(
         child: Column(
@@ -834,6 +749,135 @@ class _CategoryContentLoaderState extends State<_CategoryContentLoader>
       );
     }
 
+    if (!hasFilters) {
+      return _buildVideoGrid();
+    }
+
+    return Column(
+      children: [
+        _buildFilterChips(),
+        Expanded(child: _videos.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 48, color: Colors.grey[400]),
+                    const SizedBox(height: 12),
+                    Text(
+                      '暂无内容，试试调整筛选条件',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              )
+            : _buildVideoGrid()),
+      ],
+    );
+  }
+
+  Widget _buildFilterChips() {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 200),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _filterDefs.map((filter) {
+            final key = filter['key'] as String? ?? '';
+            final name = filter['name'] as String? ?? key;
+            final values = filter['value'] as List<dynamic>? ?? [];
+            final selectedValue = _selectedFilters[key] ?? '';
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 2),
+                    child: Text(
+                      name,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    height: 30,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: values.length + 1,
+                      separatorBuilder: (_, __) => const SizedBox(width: 4),
+                      itemBuilder: (context, index) {
+                        String label;
+                        String value;
+
+                        if (index == 0) {
+                          label = '全部';
+                          value = '';
+                        } else {
+                          final v = values[index - 1];
+                          if (v is Map) {
+                            label = v['n']?.toString() ?? v['name']?.toString() ?? v['v']?.toString() ?? '';
+                            value = v['v']?.toString() ?? v['value']?.toString() ?? '';
+                          } else {
+                            label = v.toString();
+                            value = v.toString();
+                          }
+                        }
+
+                        final isSelected = selectedValue == value;
+                        return GestureDetector(
+                          onTap: () {
+                            _onFilterChanged(key, value);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.blue : Colors.grey[200],
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isSelected ? Colors.white : Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _onFilterChanged(String key, String value) {
+    setState(() {
+      if (value.isEmpty) {
+        _selectedFilters.remove(key);
+      } else {
+        _selectedFilters[key] = value;
+      }
+      _currentPage = 1;
+      _hasMore = true;
+      _videos = [];
+    });
+    _loadContent();
+  }
+
+  Widget _buildVideoGrid() {
     return GridView.builder(
       padding: const EdgeInsets.all(8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
