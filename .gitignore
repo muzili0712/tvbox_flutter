@@ -35,6 +35,11 @@ migrate_working_dir/
 
 # Node.js build artifacts
 **/nodejs-project/dist/
+**/node_modules/
+package-lock.json
+
+# Diagnostic reports
+diagnostic-report.txt
 
 # Symbolication related
 app.*.symbols

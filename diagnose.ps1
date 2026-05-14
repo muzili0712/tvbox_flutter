@@ -1,6 +1,5 @@
-# TVBox 源诊断工具 (Windows PowerShell)
-# 用法: pwsh ./diagnose.ps1 [-SourceUrl URL] [-TestKeyword 关键词] [-Verbose]
-# 示例: pwsh ./diagnose.ps1 -TestKeyword "庆余年" -Verbose
+# TVBox 源诊断工具 (Windows PowerShell 5.x 兼容)
+# 用法: powershell -ExecutionPolicy Bypass -File .\diagnose.ps1
 
 param(
     [string]$SourceUrl = "https://9280.kstore.vip/cat/index.js",
@@ -12,41 +11,23 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host ""
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  TVBox 源诊断工具 v1.0" -ForegroundColor Cyan
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  源: $SourceUrl" -ForegroundColor Gray
-Write-Host "  搜索关键词: $TestKeyword" -ForegroundColor Gray
+Write-Host "=======================================" -ForegroundColor Cyan
+Write-Host "  TVBox Source Diagnostic Tool v1.0" -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Cyan
+Write-Host "  Source: $SourceUrl" -ForegroundColor Gray
+Write-Host "  Keyword: $TestKeyword" -ForegroundColor Gray
 Write-Host ""
 
-function Invoke-SpiderApi {
-    param([string]$Method, [string]$Url, [string]$Body = "{}", [int]$Timeout = 15)
-    try {
-        $headers = @{ "Content-Type" = "application/json" }
-        if ($Method -eq "GET") {
-            return Invoke-RestMethod -Uri $Url -Method GET -TimeoutSec $Timeout
-        } else {
-            return Invoke-RestMethod -Uri $Url -Method POST -Headers $headers -Body $Body -TimeoutSec $Timeout
-        }
-    } catch {
-        throw $_
-    }
-}
-
-# ============================================================
-# 1. 检查环境
-# ============================================================
-Write-Host "[1/5] 检查环境..." -ForegroundColor Yellow
+# 1. Check environment
+Write-Host "[1/5] Checking environment..." -ForegroundColor Yellow
 
 try {
     $nodeVer = node --version 2>$null
-    if ($LASTEXITCODE -ne 0) { throw "not found" }
     Write-Host "  Node.js: $nodeVer" -ForegroundColor Green
 } catch {
-    Write-Host "  Node.js 未安装! 请从 https://nodejs.org 安装" -ForegroundColor Red
+    Write-Host "  Node.js not found!" -ForegroundColor Red
     exit 1
 }
 
@@ -55,20 +36,16 @@ $nodejsDir = Join-Path $scriptDir "ios\Runner\nodejs-project"
 $nodeModulesDir = Join-Path $nodejsDir "node_modules"
 
 if (-not (Test-Path $nodeModulesDir)) {
-    Write-Host "  安装 Node.js 依赖..." -ForegroundColor Yellow
+    Write-Host "  Installing npm dependencies..." -ForegroundColor Yellow
     Push-Location $nodejsDir
     npm install --legacy-peer-deps 2>$null
     Pop-Location
-    Write-Host "  依赖安装完成" -ForegroundColor Green
-} else {
-    Write-Host "  依赖已安装" -ForegroundColor Green
 }
+Write-Host "  Dependencies OK" -ForegroundColor Green
 
-# ============================================================
-# 2. 下载源文件
-# ============================================================
+# 2. Download source
 Write-Host ""
-Write-Host "[2/5] 下载源文件..." -ForegroundColor Yellow
+Write-Host "[2/5] Downloading source..." -ForegroundColor Yellow
 
 $tempDir = Join-Path $env:TEMP "tvbox-diag-$(Get-Random)"
 New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
@@ -77,21 +54,19 @@ $indexJsPath = Join-Path $tempDir "index.js"
 try {
     Invoke-WebRequest -Uri $SourceUrl -OutFile $indexJsPath -TimeoutSec 30
     $fileSize = (Get-Item $indexJsPath).Length
-    Write-Host "  下载完成: $([math]::Round($fileSize/1KB, 1)) KB" -ForegroundColor Green
+    Write-Host "  Downloaded: $([math]::Round($fileSize/1KB, 1)) KB" -ForegroundColor Green
 } catch {
-    Write-Host "  下载失败: $_" -ForegroundColor Red
+    Write-Host "  Download failed: $_" -ForegroundColor Red
     Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     exit 1
 }
 
 $configJsPath = Join-Path $tempDir "index.config.js"
-"const config = { video: { sites: [] } };`nexport default config;" | Out-File -FilePath $configJsPath -Encoding utf8
+Set-Content -Path $configJsPath -Value "const config = { video: { sites: [] } };`nexport default config;" -Encoding UTF8
 
-# ============================================================
-# 3. 启动 Spider 服务器
-# ============================================================
+# 3. Start Spider server
 Write-Host ""
-Write-Host "[3/5] 启动 Spider 服务器..." -ForegroundColor Yellow
+Write-Host "[3/5] Starting Spider server..." -ForegroundColor Yellow
 
 $mainJsPath = Join-Path $nodejsDir "src\main.js"
 $stdoutLog = Join-Path $tempDir "server-stdout.log"
@@ -99,77 +74,23 @@ $stderrLog = Join-Path $tempDir "server-stderr.log"
 
 $env:NODE_PATH = $nodeModulesDir
 
-$proc = Start-Process -FilePath "node" -ArgumentList $mainJsPath -WorkingDirectory $nodejsDir -PassThru -NoNewWindow -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
-
-Start-Sleep -Seconds 2
-
-if ($proc.HasExited) {
-    Write-Host "  服务器启动失败!" -ForegroundColor Red
-    if (Test-Path $stderrLog) { Get-Content $stderrLog | ForEach-Object { Write-Host "  $_" -ForegroundColor Red } }
-    Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-    exit 1
-}
-
-# 读取管理端口
-$mgmtPort = 0
-for ($i = 0; $i -lt 20; $i++) {
-    Start-Sleep -Milliseconds 300
-    if (Test-Path $stdoutLog) {
-        $logContent = Get-Content $stdoutLog -ErrorAction SilentlyContinue
-        # 查找管理服务器端口 - 它监听在随机端口
-        break
-    }
-}
-
-# 管理服务器端口需要从日志或进程信息获取
-# 由于 main.js 的管理服务器输出到 stdout，我们读取它
-Start-Sleep -Seconds 1
-
-# 直接尝试通过 /source/loadPath 加载源
-# 管理端口在 stdout 中，但我们可以通过扫描端口找到它
-Write-Host "  查找管理服务器端口..." -ForegroundColor Gray
-
-for ($port = 50000; $port -lt 60000; $port++) {
-    # 不现实，改用日志
-    break
-}
-
-# 从日志读取管理端口
-$mgmtPort = 0
-if (Test-Path $stdoutLog) {
-    $logLines = Get-Content $stdoutLog -ErrorAction SilentlyContinue
-    foreach ($line in $logLines) {
-        if ($line -match "management server on (\d+)" -or $line -match "listening.*:(\d{4,5})") {
-            $mgmtPort = [int]$Matches[1]
-        }
-    }
-}
-
-# 如果找不到管理端口，尝试通过 /check 端点扫描
-if ($mgmtPort -eq 0) {
-    Write-Host "  从日志未找到端口，尝试扫描..." -ForegroundColor Gray
-    # main.js 管理服务器在启动时输出到 sendMessageToNative
-    # 但在独立模式下，我们无法获取端口
-    # 改用另一种方式：直接修改 main.js 输出端口
-}
-
-# 更好的方式：创建一个包装脚本，输出管理端口
+# Create wrapper to capture ports
 $wrapperJs = Join-Path $tempDir "wrapper.js"
-@"
+$wrapperContent = @"
 const path = require('path');
 const http = require('http');
 
-// Monkey-patch server.listen to capture ports
 const origListen = http.Server.prototype.listen;
-http.Server.prototype.listen = function(...args) {
-    const callback = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
-    const newCallback = function() {
-        const addr = this.address();
+http.Server.prototype.listen = function() {
+    var args = Array.prototype.slice.call(arguments);
+    var callback = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
+    var self = this;
+    var newCallback = function() {
+        var addr = self.address();
         if (addr) {
-            const type = addr.family === 'IPv4' ? 'unknown' : 'unknown';
             console.log('SERVER_PORT:' + addr.port);
         }
-        if (callback) callback.call(this);
+        if (callback) callback.call(self);
     };
     if (callback) {
         args[args.length - 1] = newCallback;
@@ -179,73 +100,62 @@ http.Server.prototype.listen = function(...args) {
     return origListen.apply(this, args);
 };
 
-// Override sendMessageToNative
-globalThis.catServerFactory = (handle) => {
-    let port = 0;
-    const server = require('http').createServer((req, res) => {
+globalThis.catServerFactory = function(handle) {
+    var port = 0;
+    var server = require('http').createServer(function(req, res) {
         handle(req, res);
     });
-    server.on('listening', () => {
+    server.on('listening', function() {
         port = server.address().port;
         console.log('SPIDER_PORT:' + port);
     });
     return server;
 };
 
-globalThis.catDartServerPort = () => 0;
+globalThis.catDartServerPort = function() { return 0; };
 
-// Load main.js
-require('$($mainJsPath.Replace('\', '\\'))');
+require('$($mainJsPath.Replace('\', '/'))');
 "@
- | Out-File -FilePath $wrapperJs -Encoding utf8
+Set-Content -Path $wrapperJs -Value $wrapperContent -Encoding UTF8
 
-# 杀掉旧进程
-$proc.Kill()
-Start-Sleep -Seconds 1
-
-# 用包装脚本重新启动
 $proc = Start-Process -FilePath "node" -ArgumentList $wrapperJs -WorkingDirectory $nodejsDir -PassThru -NoNewWindow -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
 
 Start-Sleep -Seconds 3
 
 if ($proc.HasExited) {
-    Write-Host "  服务器启动失败!" -ForegroundColor Red
+    Write-Host "  Server failed to start!" -ForegroundColor Red
     if (Test-Path $stderrLog) { Get-Content $stderrLog | ForEach-Object { Write-Host "  $_" -ForegroundColor Red } }
     Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     exit 1
 }
 
-# 从日志读取端口
+# Read ports from log
 $spiderPort = 0
 $mgmtPort = 0
 if (Test-Path $stdoutLog) {
     $logLines = Get-Content $stdoutLog -ErrorAction SilentlyContinue
     foreach ($line in $logLines) {
         if ($line -match "SPIDER_PORT:(\d+)") { $spiderPort = [int]$Matches[1] }
-        if ($line -match "SERVER_PORT:(\d+)") { 
+        if ($line -match "SERVER_PORT:(\d+)") {
             if ($mgmtPort -eq 0) { $mgmtPort = [int]$Matches[1] }
         }
     }
 }
 
-if ($spiderPort -eq 0) {
-    Write-Host "  未找到 Spider 端口，尝试加载源..." -ForegroundColor Yellow
-}
-
-# 通过管理端口加载源
+# Load source via management port
 if ($mgmtPort -gt 0) {
-    Write-Host "  管理端口: $mgmtPort" -ForegroundColor Gray
+    Write-Host "  Management port: $mgmtPort" -ForegroundColor Gray
     try {
-        $loadBody = @{ path = $tempDir } | ConvertTo-Json
+        $loadBody = "{`"path`":`"$($tempDir.Replace('\','\\'))`"}"
         $loadResult = Invoke-RestMethod -Uri "http://127.0.0.1:$mgmtPort/source/loadPath" -Method POST -ContentType "application/json" -Body $loadBody -TimeoutSec 15
-        Write-Host "  源加载结果: $($loadResult | ConvertTo-Json -Compress)" -ForegroundColor Gray
+        Write-Host "  Source loaded: $($loadResult | ConvertTo-Json -Compress)" -ForegroundColor Gray
     } catch {
-        Write-Host "  源加载失败: $_" -ForegroundColor Yellow
+        Write-Host "  Source load failed: $_" -ForegroundColor Yellow
     }
 }
 
-# 等待 spider 端口
-Start-Sleep -Seconds 3
+# Wait for spider port after loading
+Start-Sleep -Seconds 5
 if (Test-Path $stdoutLog) {
     $logLines = Get-Content $stdoutLog -ErrorAction SilentlyContinue
     foreach ($line in $logLines) {
@@ -254,41 +164,37 @@ if (Test-Path $stdoutLog) {
 }
 
 if ($spiderPort -eq 0) {
-    Write-Host "  Spider 服务器未启动! 检查日志:" -ForegroundColor Red
+    Write-Host "  Spider server not started! Check log:" -ForegroundColor Red
     if (Test-Path $stderrLog) { Get-Content $stderrLog -Tail 20 | ForEach-Object { Write-Host "    $_" -ForegroundColor Red } }
     $proc.Kill()
     Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     exit 1
 }
 
-Write-Host "  Spider 服务器启动成功, 端口: $spiderPort" -ForegroundColor Green
+Write-Host "  Spider server started on port: $spiderPort" -ForegroundColor Green
 
 $baseUrl = "http://127.0.0.1:$spiderPort"
 
-# ============================================================
-# 4. 获取配置并测试线路
-# ============================================================
+# 4. Test each site
 Write-Host ""
-Write-Host "[4/5] 测试线路..." -ForegroundColor Yellow
+Write-Host "[4/5] Testing sites..." -ForegroundColor Yellow
 Write-Host ""
 
 $config = $null
 try {
     $config = Invoke-RestMethod -Uri "$baseUrl/config" -Method GET -TimeoutSec 10
 } catch {
-    Write-Host "  获取配置失败: $_" -ForegroundColor Red
+    Write-Host "  Failed to get config: $_" -ForegroundColor Red
     $proc.Kill()
     Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     exit 1
 }
 
 $sites = $config.video.sites
-Write-Host "  获取到 $($sites.Count) 个线路" -ForegroundColor Green
+Write-Host "  Found $($sites.Count) sites" -ForegroundColor Green
 Write-Host ""
 
 $results = @()
-$catResultRef = $null
-$searchResultRef = $null
 
 foreach ($site in $sites) {
     $siteKey = $site.key
@@ -296,34 +202,34 @@ foreach ($site in $sites) {
     $siteType = $site.type
     $siteApi = $site.api
     $shortKey = $siteKey -replace "nodejs_", ""
-    $spiderPath = if ($siteApi) { $siteApi } else { "/spider/$shortKey/$siteType" }
     
-    $result = [ordered]@{
-        Name = $siteName
-        Key = $shortKey
-        Type = $siteType
-        Init = "-"
-        Home = "-"
-        Category = "-"
-        Search = "-"
-        Detail = "-"
-        Play = "-"
-        Errors = @()
-        Info = @()
+    if ($siteApi) {
+        $spiderPath = $siteApi
+    } else {
+        $spiderPath = "/spider/$shortKey/$siteType"
     }
     
-    Write-Host "  ── $siteName ──" -ForegroundColor White -NoNewline
+    $rInit = "-"
+    $rHome = "-"
+    $rCategory = "-"
+    $rSearch = "-"
+    $rDetail = "-"
+    $rPlay = "-"
+    $rErrors = @()
+    $rInfo = @()
+    
+    Write-Host "  -- $siteName --" -ForegroundColor White -NoNewline
     Write-Host " [$shortKey]" -ForegroundColor DarkGray
     
     # Init
     try {
         Invoke-RestMethod -Uri "$baseUrl$spiderPath/init" -Method POST -ContentType "application/json" -Body "{}" -TimeoutSec 10 | Out-Null
-        $result.Init = "OK"
+        $rInit = "OK"
     } catch {
-        $result.Init = "FAIL"
-        $result.Errors += "Init: $($_.Exception.Message)"
+        $rInit = "FAIL"
+        $rErrors += "Init: $($_.Exception.Message)"
         Write-Host "    Init: FAIL" -ForegroundColor Red
-        $results += [PSCustomObject]$result
+        $results += New-Object PSObject -Property @{Name=$siteName; Key=$shortKey; Init=$rInit; Home=$rHome; Category=$rCategory; Search=$rSearch; Detail=$rDetail; Play=$rPlay; Errors=$rErrors; Info=$rInfo}
         continue
     }
     
@@ -332,25 +238,18 @@ foreach ($site in $sites) {
     try {
         $homeResult = Invoke-RestMethod -Uri "$baseUrl$spiderPath/home" -Method POST -ContentType "application/json" -Body "{}" -TimeoutSec 15
         if ($homeResult.class -and $homeResult.class.Count -gt 0) {
-            $result.Home = "OK"
+            $rHome = "OK"
             $catNames = ($homeResult.class | ForEach-Object { $_.type_name }) -join ", "
-            $result.Info += "分类: $catNames"
-            Write-Host "    Home: OK - $($homeResult.class.Count) 分类" -ForegroundColor Green
-            
-            if ($Verbose -and $homeResult.filters) {
-                foreach ($prop in $homeResult.filters.PSObject.Properties) {
-                    $filterNames = ($prop.Value | ForEach-Object { $_.name }) -join ", "
-                    Write-Host "      filters[$($prop.Name)]: $filterNames" -ForegroundColor DarkGray
-                }
-            }
+            $rInfo += "Categories: $catNames"
+            Write-Host "    Home: OK - $($homeResult.class.Count) categories" -ForegroundColor Green
         } else {
-            $result.Home = "EMPTY"
-            $result.Errors += "Home: 无分类"
-            Write-Host "    Home: 无分类" -ForegroundColor Yellow
+            $rHome = "EMPTY"
+            $rErrors += "Home: no categories"
+            Write-Host "    Home: no categories" -ForegroundColor Yellow
         }
     } catch {
-        $result.Home = "FAIL"
-        $result.Errors += "Home: $($_.Exception.Message)"
+        $rHome = "FAIL"
+        $rErrors += "Home: $($_.Exception.Message)"
         Write-Host "    Home: FAIL" -ForegroundColor Red
     }
     
@@ -363,52 +262,56 @@ foreach ($site in $sites) {
         $filterObj = @{}
         if ($homeResult.filters) {
             $catIdStr = $catId.ToString()
-            $catFilters = $homeResult.filters.PSObject.Properties | Where-Object { $_.Name -eq $catIdStr } | Select-Object -First 1
-            if ($catFilters) {
-                foreach ($f in $catFilters.Value) {
-                    if ($f.init -and $f.init.ToString() -ne "") {
-                        $filterObj[$f.key] = $f.init
-                    } elseif ($f.value -and $f.value.Count -gt 0) {
-                        $filterObj[$f.key] = $f.value[0].v
+            try {
+                $catFilters = $homeResult.filters.PSObject.Properties | Where-Object { $_.Name -eq $catIdStr } | Select-Object -First 1
+                if ($catFilters) {
+                    foreach ($f in $catFilters.Value) {
+                        if ($f.init -and $f.init.ToString() -ne "") {
+                            $filterObj[$f.key] = $f.init
+                        } elseif ($f.value -and $f.value.Count -gt 0) {
+                            $filterObj[$f.key] = $f.value[0].v
+                        }
                     }
                 }
-            }
+            } catch {}
         }
         
         $catBody = @{ id = $catId; page = 1; filters = $filterObj } | ConvertTo-Json -Compress -Depth 5
         
         try {
             $catResult = Invoke-RestMethod -Uri "$baseUrl$spiderPath/category" -Method POST -ContentType "application/json" -Body $catBody -TimeoutSec 15
-            $listCount = if ($catResult.list) { $catResult.list.Count } else { 0 }
+            $listCount = 0
+            if ($catResult.list) { $listCount = $catResult.list.Count }
             
             if ($listCount -gt 0) {
-                $result.Category = "OK($listCount)"
-                $result.Info += "首分类[$catName]: $listCount 条"
-                Write-Host "    Category[$catName]: OK - $listCount 条" -ForegroundColor Green
+                $rCategory = "OK($listCount)"
+                $rInfo += "Category[$catName]: $listCount items"
+                Write-Host "    Category[$catName]: OK - $listCount items" -ForegroundColor Green
             } else {
-                # 尝试空 filters
-                $emptyBody = @{ id = $catId; page = 1; filters = @{} } | ConvertTo-Json -Compress
+                # Retry with empty filters
+                $emptyBody = "{`"id`":`"$catId`",`"page`":1,`"filters`":{}}"
                 try {
                     $retryCat = Invoke-RestMethod -Uri "$baseUrl$spiderPath/category" -Method POST -ContentType "application/json" -Body $emptyBody -TimeoutSec 15
-                    $retryCount = if ($retryCat.list) { $retryCat.list.Count } else { 0 }
+                    $retryCount = 0
+                    if ($retryCat.list) { $retryCount = $retryCat.list.Count }
                     if ($retryCount -gt 0) {
-                        $result.Category = "OK*($retryCount)"
-                        $result.Info += "首分类[$catName](空filters): $retryCount 条"
-                        Write-Host "    Category[$catName]: OK (空filters) - $retryCount 条" -ForegroundColor Green
+                        $rCategory = "OK*($retryCount)"
+                        Write-Host "    Category[$catName]: OK (empty filters) - $retryCount items" -ForegroundColor Green
                     } else {
-                        $result.Category = "EMPTY"
-                        $result.Errors += "Category[$catName]: list为空 (pagecount=$($catResult.pagecount))"
-                        Write-Host "    Category[$catName]: list为空! pagecount=$($catResult.pagecount)" -ForegroundColor Red
+                        $rCategory = "EMPTY"
+                        $pc = $catResult.pagecount
+                        $rErrors += "Category[$catName]: empty list (pagecount=$pc)"
+                        Write-Host "    Category[$catName]: EMPTY! pagecount=$pc" -ForegroundColor Red
                     }
                 } catch {
-                    $result.Category = "EMPTY"
-                    $result.Errors += "Category[$catName]: 重试失败"
-                    Write-Host "    Category[$catName]: 重试也失败" -ForegroundColor Red
+                    $rCategory = "EMPTY"
+                    $rErrors += "Category[$catName]: retry failed"
+                    Write-Host "    Category[$catName]: retry failed" -ForegroundColor Red
                 }
             }
         } catch {
-            $result.Category = "FAIL"
-            $result.Errors += "Category: $($_.Exception.Message)"
+            $rCategory = "FAIL"
+            $rErrors += "Category: $($_.Exception.Message)"
             Write-Host "    Category: FAIL" -ForegroundColor Red
         }
     }
@@ -416,27 +319,26 @@ foreach ($site in $sites) {
     # Search
     if (-not $SkipSearch) {
         try {
-            $searchBody = @{ wd = $TestKeyword; page = 1 } | ConvertTo-Json -Compress
+            $searchBody = "{`"wd`":`"$TestKeyword`",`"page`":1}"
             $searchResult = Invoke-RestMethod -Uri "$baseUrl$spiderPath/search" -Method POST -ContentType "application/json" -Body $searchBody -TimeoutSec 20
-            $searchCount = if ($searchResult.list) { $searchResult.list.Count } else { 0 }
+            $searchCount = 0
+            if ($searchResult.list) { $searchCount = $searchResult.list.Count }
             if ($searchCount -gt 0) {
-                $result.Search = "OK($searchCount)"
-                Write-Host "    Search: OK - $searchCount 条" -ForegroundColor Green
+                $rSearch = "OK($searchCount)"
+                Write-Host "    Search: OK - $searchCount results" -ForegroundColor Green
             } else {
-                $result.Search = "EMPTY"
-                Write-Host "    Search: 无结果" -ForegroundColor Yellow
+                $rSearch = "EMPTY"
+                Write-Host "    Search: no results" -ForegroundColor Yellow
             }
         } catch {
             $status = ""
-            if ($_.Exception.Response) {
-                $status = [int]$_.Exception.Response.StatusCode
-            }
+            try { $status = [int]$_.Exception.Response.StatusCode } catch {}
             if ($status -eq 404) {
-                $result.Search = "N/A"
-                Write-Host "    Search: 不支持(404)" -ForegroundColor DarkGray
+                $rSearch = "N/A"
+                Write-Host "    Search: not supported (404)" -ForegroundColor DarkGray
             } else {
-                $result.Search = "FAIL"
-                $result.Errors += "Search: $($_.Exception.Message)"
+                $rSearch = "FAIL"
+                $rErrors += "Search: $($_.Exception.Message)"
                 Write-Host "    Search: FAIL" -ForegroundColor Red
             }
         }
@@ -445,77 +347,71 @@ foreach ($site in $sites) {
     # Detail & Play
     if (-not $SkipDetail) {
         $testVideoId = $null
-        $testVideoName = $null
-        $detailRef = $null
         
-        # 从搜索结果获取
         if ($searchResult -and $searchResult.list -and $searchResult.list.Count -gt 0) {
             $testVideoId = $searchResult.list[0].vod_id
-            $testVideoName = $searchResult.list[0].vod_name
-        }
-        # 从分类结果获取
-        elseif ($catResult -and $catResult.list -and $catResult.list.Count -gt 0) {
+        } elseif ($catResult -and $catResult.list -and $catResult.list.Count -gt 0) {
             $testVideoId = $catResult.list[0].vod_id
-            $testVideoName = $catResult.list[0].vod_name
         }
         
         if ($testVideoId) {
             try {
-                $detailBody = @{ id = $testVideoId.ToString() } | ConvertTo-Json -Compress
+                $detailBody = "{`"id`":`"$testVideoId`"}"
                 $detailResult = Invoke-RestMethod -Uri "$baseUrl$spiderPath/detail" -Method POST -ContentType "application/json" -Body $detailBody -TimeoutSec 15
                 if ($detailResult.list -and $detailResult.list.Count -gt 0) {
                     $detail = $detailResult.list[0]
-                    $playFrom = if ($detail.vod_play_from) { ($detail.vod_play_from -split '\$\$\$').Count } else { 0 }
-                    $result.Detail = "OK($playFrom src)"
-                    Write-Host "    Detail: OK - $playFrom 个播放源" -ForegroundColor Green
+                    $playFrom = 0
+                    if ($detail.vod_play_from) { $playFrom = ($detail.vod_play_from -split '\$\$\$').Count }
+                    $rDetail = "OK($playFrom src)"
+                    Write-Host "    Detail: OK - $playFrom sources" -ForegroundColor Green
                     
                     # Play
                     if ($detail.vod_play_url) {
                         $firstEp = ($detail.vod_play_url -split '#')[0]
-                        $epUrl = if ($firstEp -match '\$\$\$') { ($firstEp -split '\$\$\$')[-1] } else { $firstEp }
-                        $epName = if ($firstEp -match '\$\$\$') { ($firstEp -split '\$\$\$')[0] } else { "" }
-                        $playFlag = if ($detail.vod_play_from) { ($detail.vod_play_from -split '\$\$\$')[0] } else { "" }
+                        $epUrl = $firstEp
+                        if ($firstEp -match '\$\$\$') { $epUrl = ($firstEp -split '\$\$\$')[-1] }
+                        $playFlag = ""
+                        if ($detail.vod_play_from) { $playFlag = ($detail.vod_play_from -split '\$\$\$')[0] }
                         
                         try {
-                            $playBody = @{ flag = $playFlag; id = $epUrl } | ConvertTo-Json -Compress
+                            $playBody = "{`"flag`":`"$playFlag`",`"id`":$(ConvertTo-Json $epUrl -Compress)}"
                             $playResult = Invoke-RestMethod -Uri "$baseUrl$spiderPath/play" -Method POST -ContentType "application/json" -Body $playBody -TimeoutSec 15
                             if ($playResult.url -or $playResult.parse) {
-                                $result.Play = "OK"
-                                $urlPreview = if ($playResult.url) { $playResult.url.Substring(0, [Math]::Min(60, $playResult.url.Length)) } else { "parse" }
+                                $rPlay = "OK"
+                                $urlPreview = ""
+                                if ($playResult.url) { $urlPreview = $playResult.url.Substring(0, [Math]::Min(60, $playResult.url.Length)) }
                                 Write-Host "    Play: OK - $urlPreview..." -ForegroundColor Green
                             } else {
-                                $result.Play = "EMPTY"
-                                Write-Host "    Play: 无播放URL" -ForegroundColor Yellow
+                                $rPlay = "EMPTY"
+                                Write-Host "    Play: no URL" -ForegroundColor Yellow
                             }
                         } catch {
-                            $result.Play = "FAIL"
-                            $result.Errors += "Play: $($_.Exception.Message)"
+                            $rPlay = "FAIL"
+                            $rErrors += "Play: $($_.Exception.Message)"
                             Write-Host "    Play: FAIL" -ForegroundColor Red
                         }
                     }
                 } else {
-                    $result.Detail = "EMPTY"
-                    Write-Host "    Detail: 无详情" -ForegroundColor Yellow
+                    $rDetail = "EMPTY"
+                    Write-Host "    Detail: empty" -ForegroundColor Yellow
                 }
             } catch {
-                $result.Detail = "FAIL"
-                $result.Errors += "Detail: $($_.Exception.Message)"
+                $rDetail = "FAIL"
+                $rErrors += "Detail: $($_.Exception.Message)"
                 Write-Host "    Detail: FAIL" -ForegroundColor Red
             }
         } else {
-            Write-Host "    Detail: 跳过(无测试ID)" -ForegroundColor DarkGray
+            Write-Host "    Detail: skipped (no test ID)" -ForegroundColor DarkGray
         }
     }
     
-    $results += [PSCustomObject]$result
+    $results += New-Object PSObject -Property @{Name=$siteName; Key=$shortKey; Init=$rInit; Home=$rHome; Category=$rCategory; Search=$rSearch; Detail=$rDetail; Play=$rPlay; Errors=$rErrors; Info=$rInfo}
     Write-Host ""
 }
 
-# ============================================================
-# 5. 生成报告
-# ============================================================
-Write-Host "[5/5] 诊断报告" -ForegroundColor Yellow
-Write-Host "======================================" -ForegroundColor Cyan
+# 5. Report
+Write-Host "[5/5] Diagnostic Report" -ForegroundColor Yellow
+Write-Host "=======================================" -ForegroundColor Cyan
 
 $initOK = ($results | Where-Object { $_.Init -eq "OK" }).Count
 $homeOK = ($results | Where-Object { $_.Home -eq "OK" }).Count
@@ -526,7 +422,7 @@ $playOK = ($results | Where-Object { $_.Play -eq "OK" }).Count
 $total = $results.Count
 
 Write-Host ""
-Write-Host "  总线路: $total" -ForegroundColor White
+Write-Host "  Total sites: $total" -ForegroundColor White
 Write-Host "  Init:     $initOK / $total" -ForegroundColor $(if ($initOK -eq $total) {"Green"} else {"Yellow"})
 Write-Host "  Home:     $homeOK / $total" -ForegroundColor $(if ($homeOK -eq $total) {"Green"} else {"Yellow"})
 Write-Host "  Category: $catOK / $total" -ForegroundColor $(if ($catOK -eq $total) {"Green"} else {"Yellow"})
@@ -534,11 +430,11 @@ Write-Host "  Search:   $searchOK / $total" -ForegroundColor $(if ($searchOK -eq
 Write-Host "  Detail:   $detailOK / $total" -ForegroundColor $(if ($detailOK -eq $total) {"Green"} else {"Yellow"})
 Write-Host "  Play:     $playOK / $total" -ForegroundColor $(if ($playOK -eq $total) {"Green"} else {"Yellow"})
 
-# 问题线路
+# Problem sites
 $problemSites = $results | Where-Object { $_.Errors.Count -gt 0 }
 if ($problemSites) {
     Write-Host ""
-    Write-Host "  ⚠️ 问题线路:" -ForegroundColor Red
+    Write-Host "  Problem sites:" -ForegroundColor Red
     foreach ($s in $problemSites) {
         Write-Host "    $($s.Name) [$($s.Key)]" -ForegroundColor Yellow
         foreach ($e in $s.Errors) {
@@ -547,30 +443,30 @@ if ($problemSites) {
     }
 }
 
-# Category 为空的线路
+# Empty category sites
 $emptyCat = $results | Where-Object { $_.Category -eq "EMPTY" }
 if ($emptyCat) {
     Write-Host ""
-    Write-Host "  📋 分类内容为空的线路:" -ForegroundColor Yellow
+    Write-Host "  Empty category sites:" -ForegroundColor Yellow
     foreach ($s in $emptyCat) {
         Write-Host "    $($s.Name) [$($s.Key)]" -ForegroundColor DarkGray
     }
 }
 
-# 保存报告
+# Save report
 $reportPath = Join-Path $scriptDir "diagnostic-report.txt"
 $reportLines = @()
-$reportLines += "TVBox 源诊断报告 - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-$reportLines += "源: $SourceUrl"
+$reportLines += "TVBox Diagnostic Report - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+$reportLines += "Source: $SourceUrl"
 $reportLines += "=" * 80
 $reportLines += ""
-$reportLines += "统计: 总=$total | Init=$initOK | Home=$homeOK | Category=$catOK | Search=$searchOK | Detail=$detailOK | Play=$playOK"
+$reportLines += "Summary: Total=$total | Init=$initOK | Home=$homeOK | Category=$catOK | Search=$searchOK | Detail=$detailOK | Play=$playOK"
 $reportLines += ""
-$reportLines += "{0,-20} {1,-12} {2,-6} {3,-8} {4,-10} {5,-10} {6,-10} {7,-8}" -f "线路", "Key", "Type", "Init", "Home", "Category", "Search", "Detail", "Play"
+$reportLines += "{0,-25} {1,-15} {2,-8} {3,-8} {4,-12} {5,-12} {6,-12} {7,-8}" -f "Site", "Key", "Init", "Home", "Category", "Search", "Detail", "Play"
 $reportLines += "-" * 80
 
 foreach ($r in $results) {
-    $reportLines += "{0,-20} {1,-12} {2,-6} {3,-8} {4,-10} {5,-10} {6,-10} {7,-8}" -f $r.Name, $r.Key, $r.Type, $r.Init, $r.Home, $r.Category, $r.Search, $r.Detail
+    $reportLines += "{0,-25} {1,-15} {2,-8} {3,-8} {4,-12} {5,-12} {6,-12} {7,-8}" -f $r.Name, $r.Key, $r.Init, $r.Home, $r.Category, $r.Search, $r.Detail, $r.Play
     if ($r.Errors.Count -gt 0) {
         foreach ($e in $r.Errors) {
             $reportLines += "  ERROR: $e"
@@ -585,16 +481,16 @@ foreach ($r in $results) {
 
 $reportLines | Out-File -FilePath $reportPath -Encoding utf8
 Write-Host ""
-Write-Host "  报告已保存: $reportPath" -ForegroundColor Cyan
+Write-Host "  Report saved: $reportPath" -ForegroundColor Cyan
 
-# 清理
+# Cleanup
 Write-Host ""
-Write-Host "  清理..." -ForegroundColor Gray
+Write-Host "  Cleaning up..." -ForegroundColor Gray
 $proc.Kill()
 Start-Sleep -Milliseconds 500
 Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host ""
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  诊断完成!" -ForegroundColor Green
-Write-Host "======================================" -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Cyan
+Write-Host "  Diagnostic complete!" -ForegroundColor Green
+Write-Host "=======================================" -ForegroundColor Cyan

@@ -79,7 +79,7 @@
                 const char *nodePathC = [sourcePath UTF8String];
                 setenv("NODE_PATH", nodePathC, 1);
 
-                NSMutableArray *args = [NSMutableArray arrayWithObjects:@"node", scriptPath, nil];
+                NSMutableArray *args = [NSMutableArray arrayWithObjects:@"node", @"--security-revert=CVE-2023-46809", scriptPath, nil];
                 if (nativePort > 0) {
                     [args addObject:@"--native-port"];
                     [args addObject:[NSString stringWithFormat:@"%d", nativePort]];
