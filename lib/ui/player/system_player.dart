@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:tvbox_flutter/services/log_service.dart';
@@ -39,19 +40,25 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
         Uri.parse(widget.url),
         httpHeaders: const {
           'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
+          'Accept': '*/*',
+          'Accept-Encoding': 'identity',
         },
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
       );
       
       await _videoController!.initialize();
       
       if (!mounted) return;
       
-      log('[系统播放器] ✅ 视频初始化成功，时长: ${_videoController!.value.duration}');
+      final duration = _videoController!.value.duration;
+      log('[系统播放器] ✅ 视频初始化成功，时长: $duration (${duration.inMilliseconds}ms)');
+      log('[系统播放器] 📊 视频信息: size=${_videoController!.value.size}, isLooping=${_videoController!.value.isLooping}');
       
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
         autoPlay: true,
         showControls: false,
+        allowPlaybackSpeedChanging: true,
         errorBuilder: (context, errorMessage) {
           log('[系统播放器] ❌ Chewie错误: $errorMessage');
           return Center(
@@ -74,6 +81,21 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
       
       await _videoController!.play();
       log('[系统播放器] ✅ 开始播放');
+      
+      // iOS上video_player可能需要缓冲后才返回准确时长，延迟检查
+      Future.delayed(const Duration(seconds: 3), () {
+        if (_videoController != null && mounted) {
+          final d = _videoController!.value.duration;
+          log('[系统播放器] ⏱️ 延迟时长检查: $d (${d.inMilliseconds}ms)');
+          if (d.inMilliseconds > 0) {
+            widget.onPlayerStateChanged(
+              _videoController!.value.isPlaying,
+              _videoController!.value.position.inMilliseconds.toDouble(),
+              d.inMilliseconds.toDouble(),
+            );
+          }
+        }
+      });
       
       setState(() {});
     } catch (error) {
@@ -109,10 +131,13 @@ class _SystemPlayerWidgetState extends State<SystemPlayerWidget> {
       log('[系统播放器] ✅ 恢复播放');
     }
     
+    final duration = _videoController!.value.duration.inMilliseconds.toDouble();
+    final position = _videoController!.value.position.inMilliseconds.toDouble();
+    
     widget.onPlayerStateChanged(
       _videoController!.value.isPlaying,
-      _videoController!.value.position.inMilliseconds.toDouble(),
-      _videoController!.value.duration.inMilliseconds.toDouble(),
+      position,
+      duration,
     );
   }
 
