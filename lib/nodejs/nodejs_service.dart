@@ -684,7 +684,12 @@ class NodeJSService {
         ).timeout(const Duration(seconds: 15));
         log('[searchWithSpider] 响应: status=${response.statusCode} body=${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
         if (response.statusCode == 200) {
-          return jsonDecode(response.body) as Map<String, dynamic>;
+          final body = response.body.trim();
+          if (body.isEmpty || body == 'null') {
+            log('[searchWithSpider] ⚠️ 响应体为空');
+            return {};
+          }
+          return jsonDecode(body) as Map<String, dynamic>;
         }
         break;
       } on TimeoutException {
